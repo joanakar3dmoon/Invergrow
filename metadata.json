@@ -1,0 +1,6 @@
+{
+  "name": "InverGrow",
+  "description": "Investment tracking and reinvestment platform with integrated payout automation and secure real-time webhooks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
