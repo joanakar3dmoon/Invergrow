@@ -29,10 +29,14 @@ jobs:
 
       - name: Build debug APK
         run: |
+          set -o pipefail
           cd android
-          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/gradle.log
-          echo "Exit: $?"
-          cat /tmp/gradle.log | grep -E "ERROR|error:|FAILURE|Exception|Caused by" || true
+          ./gradlew assembleDebug --no-daemon --info 2>&1 | tee /tmp/gradle.log
+        shell: bash
+
+      - name: Show error summary
+        if: failure()
+        run: grep -E "error:|ERROR|Exception|Caused by|FAILURE" /tmp/gradle.log | head -40 || cat /tmp/gradle.log | tail -50
 
       - name: Find APK
         if: always()
@@ -45,11 +49,3 @@ jobs:
           name: invergrow-debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: /tmp/gradle.log
-          retention-days: 7
