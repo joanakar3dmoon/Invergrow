@@ -11,6 +11,10 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+      - name: Download Gradle Wrapper JAR
+        run: |
+          mkdir -p android/gradle/wrapper
+          curl -sL "https://github.com/gradle/gradle/raw/v8.4.0/gradle/wrapper/gradle-wrapper.jar" -o android/gradle/wrapper/gradle-wrapper.jar
       - name: Grant execute permission
         run: chmod +x android/gradlew
       - name: Build debug APK
