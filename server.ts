@@ -338,6 +338,36 @@ async function startServer() {
     res.json({ success:true, transaction:tx, data:currentState });
   });
 
+  // ── POST /api/owner/verify — Verificar código admin ──────────────────────
+  app.post("/api/owner/verify", (req, res) => {
+    const { adminCode } = req.body;
+    const validCode = process.env.ADMIN_CODE || "joan123";
+    if (adminCode === validCode) {
+      res.json({ success: true });
+    } else {
+      res.status(403).json({ success: false, error: "Código incorrecto." });
+    }
+  });
+
+  // ── POST /api/owner/history — Historial de retiros reales ─────────────────
+  app.post("/api/owner/history", async (req, res) => {
+    const { adminCode } = req.body;
+    const validCode = process.env.ADMIN_CODE || "joan123";
+    if (adminCode !== validCode) return res.status(403).json({ success: false });
+    try {
+      const { data, error } = await supabase
+        .from("withdrawals")
+        .select("*")
+        .eq("user_id", "admin-joan")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      res.json({ success: true, withdrawals: data || [] });
+    } catch (e: any) {
+      res.json({ success: true, withdrawals: [] });
+    }
+  });
+
   // ── POST /api/owner/withdraw — Retiro real PayPal (solo propietario) ───────
   app.post("/api/owner/withdraw", async (req, res) => {
     const { adminCode, amount, paypalEmail, method, note, cardNumber, cardHolder, iban } = req.body;
