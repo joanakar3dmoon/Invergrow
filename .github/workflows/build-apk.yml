@@ -13,9 +13,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Download Gradle Wrapper JAR
         run: |
           mkdir -p android/gradle/wrapper
@@ -24,13 +21,23 @@ jobs:
       - name: Grant execute permission
         run: chmod +x android/gradlew
 
+      - name: Show ANDROID_HOME
+        run: echo "ANDROID_HOME=$ANDROID_HOME" && ls $ANDROID_HOME/build-tools/ || echo "No build-tools"
+
       - name: Build debug APK
-        run: cd android && ./gradlew assembleDebug --no-daemon
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon -PANDROID_HOME=/usr/local/lib/android/sdk 2>&1
 
       - name: Find APK
-        run: find . -name "*.apk" -type f 2>/dev/null
+        if: always()
+        run: find /home/runner /github -name "*.apk" 2>/dev/null || echo "No APK found"
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: invergrow-debug
