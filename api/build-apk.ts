@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 const EAS_TOKEN = process.env.EXPO_TOKEN || '';
 const EXPO_SLUG = 'invergrow';
-const EXPO_OWNER = 'joanlazaro83';
+const EXPO_OWNER = 'r3dm';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const { adminCode } = req.body || {};
   if (adminCode !== (process.env.ADMIN_CODE || 'joan123')) return res.status(403).json({ error: 'Codigo incorrecto' });
-  if (!EAS_TOKEN) return res.status(400).json({ error: 'EXPO_TOKEN no configurado. Añadelo en Vercel → Environment Variables', setup_url: 'https://expo.dev/accounts/joanlazaro83/settings/access-tokens' });
+  if (!EAS_TOKEN) return res.status(400).json({ error: 'EXPO_TOKEN no configurado', setup_url: 'https://expo.dev/accounts/r3dm/settings/access-tokens' });
   try {
     const r = await fetch('https://api.expo.dev/graphql', { method: 'POST', headers: { Authorization: `Bearer ${EAS_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `mutation { buildCreate(input: { projectFullName: "@${EXPO_OWNER}/${EXPO_SLUG}", platform: ANDROID, buildProfile: "preview" }) { id status createdAt } }` }) });
     const d = await r.json() as any;
