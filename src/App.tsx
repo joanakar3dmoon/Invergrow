@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Wallet, Clock, RefreshCw, Server, Shield, AlertCircle, ArrowUpRight, ArrowDownLeft, Activity, Users, CheckCircle2, ArrowRight, Sparkles, ShoppingCart } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Wallet, Clock, RefreshCw, Server, Shield, AlertCircle, ArrowUpRight, ArrowDownLeft, Activity, Users, CheckCircle2, ArrowRight, Sparkles, ShoppingCart, Megaphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SystemState, Transaction, Collaborator, WebhookLog } from './types';
 import DownloadCard from './components/DownloadCard';
@@ -117,8 +117,8 @@ export default function App() {
             <div className="flex flex-wrap border-b border-zinc-800 gap-6 mt-2 mb-4">
               <button onClick={() => setActiveTab('ai')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'ai' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" /> Factoria IA</button>
               <button onClick={() => setActiveTab('finance')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'finance' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><DollarSign className="w-4 h-4 text-emerald-500" /> Finanzas & Nominas</button>
-              <button onClick={() => setActiveTab('affiliate')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'affiliate' ? 'border-orange-500 text-orange-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><ShoppingCart className="w-4 h-4 text-orange-400" /> Afiliados Amazon</button>
-              <button onClick={() => setActiveTab('owner')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'owner' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Shield className="w-4 h-4 text-emerald-400" /> Panel Propietario</button>
+              <button onClick={() => setActiveTab('affiliate')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'affiliate' ? 'border-orange-500 text-orange-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><ShoppingCart className="w-4 h-4 text-orange-400" /> Afiliados & AdSense</button>
+              <button onClick={() => setActiveTab('owner')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'owner' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Shield className="w-4 h-4 text-emerald-400" /> Retiros Propietario</button>
             </div>
 
             {activeTab === 'ai' ? (
@@ -204,3 +204,4 @@ export default function App() {
     </div>
   );
 }
+
