@@ -115,13 +115,13 @@ async function loadStateFromDB(): Promise<void> {
   if (!SUPABASE_KEY) return;
   try {
     const { data, error } = await supabase
-      .from("app_state")
-      .select("state")
-      .eq("key", STATE_KEY)
+      .from("apps")
+      .select("description")
+      .eq("id", STATE_KEY)
       .single();
     if (error && error.code !== "PGRST116") throw error;
-    if (data?.state) {
-      currentState = data.state as SystemState;
+    if (data?.description) {
+      currentState = JSON.parse(data.description) as SystemState;
       currentState.apiConfig.geminiConnected = !!process.env.GEMINI_API_KEY;
       console.log("[InverGrow] Estado cargado desde Supabase ✅");
     } else {
@@ -136,7 +136,13 @@ async function loadStateFromDB(): Promise<void> {
 async function saveStateToDB(): Promise<void> {
   if (!SUPABASE_KEY) return;
   try {
-    await supabase.from("app_state").upsert({ key: STATE_KEY, state: currentState, updated_at: new Date().toISOString() });
+    await supabase.from("apps").upsert({
+      id: STATE_KEY,
+      user_id: "admin-joan",
+      user_email: "joanlazaro83@gmail.com",
+      name: "InverGrow State",
+      description: JSON.stringify(currentState)
+    }, { onConflict: "id" });
   } catch (e: any) {
     console.warn("[InverGrow] Error guardando en Supabase:", e.message);
   }
@@ -400,6 +406,17 @@ async function startServer() {
     };
     currentState.transactions.unshift(tx);
     logWebhook("OWNER_WITHDRAWAL","SUCCESS",{ method, amount:amtNum, paypalEmail, paypalBatchId }, statusMsg);
+    // Guardar retiro en tabla real de Supabase
+    try {
+      await supabase.from("withdrawals").insert({
+        id: tx.id,
+        user_id: "admin-joan",
+        user_email: "joanlazaro83@gmail.com",
+        amount: amtNum,
+        status: txStatus,
+        note: (note||"") + " | metodo:" + method + " | ref:" + tx.reference + (paypalBatchId ? " | batch:" + paypalBatchId : "")
+      });
+    } catch(e:any){ console.warn("[InverGrow] No se pudo guardar retiro en Supabase:", e.message); }
     await saveStateToDB();
     res.json({ success:true, message:statusMsg, transaction:tx, data:currentState });
   });
