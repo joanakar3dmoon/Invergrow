@@ -1,12 +1,19 @@
 {
   "name": "InverGrow — Ingresos Pasivos IA",
   "short_name": "InverGrow",
+  "id": "com.r3dm.invergrow",
   "description": "Plataforma de ingresos pasivos con trabajadores de IA",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#10b981",
   "orientation": "portrait",
+  "lang": "es",
+  "categories": [
+    "finance",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -21,9 +28,20 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": [
-    "finance",
-    "productivity"
+  "screenshots": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
   ],
-  "lang": "es"
+  "related_applications": [],
+  "prefer_related_applications": false
 }
