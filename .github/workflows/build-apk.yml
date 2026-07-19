@@ -4,6 +4,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
 
@@ -18,23 +21,22 @@ jobs:
           mkdir -p android/gradle/wrapper
           curl -sL "https://github.com/gradle/gradle/raw/v8.4.0/gradle/wrapper/gradle-wrapper.jar" -o android/gradle/wrapper/gradle-wrapper.jar
 
+      - name: Create local.properties
+        run: echo "sdk.dir=/usr/local/lib/android/sdk" > android/local.properties
+
       - name: Grant execute permission
         run: chmod +x android/gradlew
 
-      - name: Show ANDROID_HOME
-        run: echo "ANDROID_HOME=$ANDROID_HOME" && ls $ANDROID_HOME/build-tools/ || echo "No build-tools"
-
       - name: Build debug APK
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon -PANDROID_HOME=/usr/local/lib/android/sdk 2>&1
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/gradle.log
+          echo "Exit: $?"
+          cat /tmp/gradle.log | grep -E "ERROR|error:|FAILURE|Exception|Caused by" || true
 
       - name: Find APK
         if: always()
-        run: find /home/runner /github -name "*.apk" 2>/dev/null || echo "No APK found"
+        run: find . -name "*.apk" 2>/dev/null | head -20
 
       - name: Upload APK
         if: success()
@@ -43,3 +45,11 @@ jobs:
           name: invergrow-debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/gradle.log
+          retention-days: 7
