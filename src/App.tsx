@@ -126,7 +126,7 @@ export default function App() {
             ) : activeTab === 'affiliate' ? (
               <AffiliatePanel />
             ) : activeTab === 'owner' ? (
-              <OwnerWithdrawPanel netGains={state.netGains} balance={state.balance} onWithdraw={handleWithdraw} />
+              <OwnerWithdrawPanel netGains={state.netGains} balance={state.balance} />
             ) : (
               <>
                 <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
