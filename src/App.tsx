@@ -904,7 +904,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'radial-gradient(ellipse at 20% 10%, rgba(0,255,136,0.04) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(168,85,247,0.04) 0%, transparent 50%), #040608' }}>
+    <div className="min-h-screen overflow-y-auto" style={{ background: 'radial-gradient(ellipse at 20% 10%, rgba(0,255,136,0.04) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(168,85,247,0.04) 0%, transparent 50%), #040608' }}>
 
       {/* Header */}
       <header className="sticky top-0 z-40" style={{ background:'rgba(4,6,8,0.8)', backdropFilter:'blur(24px)', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
@@ -948,7 +948,7 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-48 md:pb-8" style={{ touchAction: 'pan-y' }}>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-32 md:pb-8" style={{ touchAction: 'pan-y', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
             <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor:'rgba(0,255,136,0.2)', borderTopColor:'#00ff88' }}/>
