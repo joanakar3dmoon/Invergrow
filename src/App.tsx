@@ -835,11 +835,21 @@ export default function App() {
 
   async function handleWithdraw(amount: number) {
     try {
-      await fetch(`${BACKEND}/api/withdraw`, {
+      const res = await fetch(`${BACKEND}/api/withdraw`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ amount })
       });
+      const data = await res.json();
       await fetchState();
+      if (data.success) {
+        if (data.paypalError) {
+          showToast('info', `Retiro de €${amount.toFixed(2)} registrado — se procesará en 24-48h`);
+        } else {
+          showToast('success', `✅ Retiro de €${amount.toFixed(2)} enviado a PayPal`);
+        }
+      } else {
+        showToast('error', data.error || 'Error al procesar retiro');
+      }
     } catch { showToast('error','Error al procesar retiro'); }
   }
 
