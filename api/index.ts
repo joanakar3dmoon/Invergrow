@@ -205,9 +205,28 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
         paypalStatus  = payout.status;
         paypalMsg     = `Retiro de €${amt.toFixed(2)} enviado a ${email} via PayPal. Batch: ${paypalBatchId}`;
       } catch (ppErr: any) {
-        // Si PayPal falla, restaurar saldo
+        // Si PayPal falla, restaurar saldo y registrar como PENDIENTE
         await patchState({ balance: available, total_withdrawals: state.total_withdrawals });
-        return res.status(502).json({ error: `Error PayPal: ${ppErr.message}` });
+        // Registrar como pendiente para revisión manual
+        await supa('invergrow_transactions', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'WITHDRAWAL',
+            amount: amt,
+            status: 'PENDING',
+            reference: ref,
+            description: `Retiro pendiente → ${email} (revisar PayPal)`,
+            gateway: 'PAYPAL',
+          }),
+        });
+        return res.status(200).json({
+          success: true,
+          reference: ref,
+          amount: amt,
+          status: 'PENDING',
+          message: `Retiro de €${amt.toFixed(2)} registrado. Se procesará manualmente en 24-48h a ${email}.`,
+          paypalError: true,
+        });
       }
     }
 
