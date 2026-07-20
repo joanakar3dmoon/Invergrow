@@ -848,8 +848,8 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 export default function App() {
   const [state, setState] = useState<SystemState>({
-    balance: 15420.50, investedCapital: 42000.00, totalWithdrawals: 2850.00,
-    reinvestmentFund: 350.00, netGains: 185.20,
+    balance: 0, investedCapital: 0, totalWithdrawals: 0,
+    reinvestmentFund: 0, netGains: 0,
     collaborators: [], transactions: [], webhookLogs: [], aiWorkers: [], aiLogs: [],
     apiConfig: { geminiConnected:false, distributionWebhook:'', targetMarket:'', payoutModel:'SPLIT_70_30' }
   });
@@ -867,10 +867,14 @@ export default function App() {
     if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/data');
-      if (!res.ok) throw new Error();
-      setState(await res.json());
-    } catch {}
-    finally { if (!silent) setLoading(false); }
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (data && typeof data.balance !== 'undefined') setState(data);
+    } catch (e) {
+      console.error('fetchState error:', e);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -937,7 +941,7 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-32 md:pb-8">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
             <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor:'rgba(0,255,136,0.2)', borderTopColor:'#00ff88' }}/>
