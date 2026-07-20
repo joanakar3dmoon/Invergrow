@@ -948,7 +948,7 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-32 md:pb-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-48 md:pb-8" style={{ touchAction: 'pan-y' }}>
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
             <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor:'rgba(0,255,136,0.2)', borderTopColor:'#00ff88' }}/>
@@ -968,7 +968,7 @@ export default function App() {
 
       {/* Mobile Nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex"
-        style={{ background:'rgba(4,6,8,0.95)', backdropFilter:'blur(24px)', borderTop:'1px solid rgba(255,255,255,0.07)' }}>
+        style={{ background:'rgba(4,6,8,0.95)', backdropFilter:'blur(24px)', borderTop:'1px solid rgba(255,255,255,0.07)', touchAction:'none' }}>
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className="flex-1 flex flex-col items-center gap-1 py-3 transition-all relative"
