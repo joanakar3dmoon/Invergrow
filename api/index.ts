@@ -196,7 +196,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   try {
-    const { amount, adminCode, recipientEmail, note } = req.body || {};
+    const { amount, adminCode, recipientEmail, note, method, iban, ibanOwner } = req.body || {};
 
     if (adminCode && adminCode !== ADMIN_CODE) {
       return res.status(403).json({ error: 'Código admin incorrecto' });
@@ -245,33 +245,30 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
           }),
         });
         // Enviar email de aviso para procesar manualmente
+        const isIban = method === 'iban' && iban;
         const paypalLink = `https://www.paypal.com/myaccount/transfer/send?recipient=${encodeURIComponent(email)}&amount=${amt.toFixed(2)}&currencyCode=EUR`;
-        await sendGmailNotification(
-          `💸 InverGrow — Retiro pendiente €${amt.toFixed(2)}`,
-          `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#040608;color:#fff;padding:32px;border-radius:16px">
-            <h2 style="color:#00ff88;margin-bottom:8px">💸 Retiro pendiente de procesar</h2>
-            <p style="color:#aaa;margin-bottom:24px">InverGrow ha registrado un retiro que necesita procesarse manualmente.</p>
-            <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-              <tr><td style="padding:8px;color:#888">Referencia</td><td style="padding:8px;color:#fff;font-family:monospace">${ref}</td></tr>
-              <tr style="background:rgba(255,255,255,0.04)"><td style="padding:8px;color:#888">Importe</td><td style="padding:8px;color:#00ff88;font-weight:bold;font-size:20px">€${amt.toFixed(2)}</td></tr>
-              <tr><td style="padding:8px;color:#888">Destino</td><td style="padding:8px;color:#fff">${email}</td></tr>
-              <tr style="background:rgba(255,255,255,0.04)"><td style="padding:8px;color:#888">Fecha</td><td style="padding:8px;color:#fff">${new Date().toLocaleString('es-ES')}</td></tr>
+        const emailSubject = isIban
+          ? `💰 InverGrow — Retiro por IBAN: €${amt.toFixed(2)}`
+          : `💰 InverGrow — Retiro pendiente: €${amt.toFixed(2)}`;
+        const emailHtml = isIban ? `
+          <div style="font-family:sans-serif;max-width:500px;margin:auto;background:#0a0a0a;color:#fff;padding:32px;border-radius:16px;border:1px solid #00ff8844">
+            <h2 style="color:#00ff88;margin:0 0 8px">💰 Retiro por IBAN solicitado</h2>
+            <p style="color:#aaa;margin:0 0 24px">Referencia: <code style="color:#00ff88">${ref}</code></p>
+            <table style="width:100%;border-collapse:collapse">
+              <tr><td style="color:#aaa;padding:8px 0;border-bottom:1px solid #222">Importe</td><td style="color:#fff;font-weight:700;text-align:right">€${amt.toFixed(2)}</td></tr>
+              <tr><td style="color:#aaa;padding:8px 0;border-bottom:1px solid #222">IBAN</td><td style="color:#00ff88;font-family:monospace;text-align:right">${iban}</td></tr>
+              <tr><td style="color:#aaa;padding:8px 0">Titular</td><td style="color:#fff;text-align:right">${ibanOwner || '—'}</td></tr>
             </table>
-            <a href="${paypalLink}" style="display:inline-block;background:linear-gradient(135deg,#00ff88,#00d4ff);color:#040608;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:16px">
-              👉 Enviar €${amt.toFixed(2)} por PayPal
-            </a>
-            <p style="color:#555;font-size:12px;margin-top:24px">InverGrow · Sistema de ingresos pasivos</p>
-          </div>`
-        );
-        return res.status(200).json({
-          success: true,
-          reference: ref,
-          amount: amt,
-          status: 'PENDING',
-          message: `Retiro de €${amt.toFixed(2)} registrado. Te hemos enviado un email con el enlace para procesarlo manualmente.`,
-          paypalError: true,
-        });
-      }
+            <p style="color:#666;font-size:12px;margin-top:24px">Haz la transferencia desde tu banco a este IBAN por el importe indicado.</p>
+          </div>` : `
+          <div style="font-family:sans-serif;max-width:500px;margin:auto;background:#0a0a0a;color:#fff;padding:32px;border-radius:16px;border:1px solid #00ff8844">
+            <h2 style="color:#00ff88;margin:0 0 8px">💰 Retiro PayPal pendiente</h2>
+            <p style="color:#aaa;margin:0 0 24px">Ref: <code style="color:#00ff88">${ref}</code></p>
+            <p style="color:#fff;font-size:24px;font-weight:700">€${amt.toFixed(2)}</p>
+            <p style="color:#aaa">Destinatario: <strong style="color:#fff">${email}</strong></p>
+            <a href="${paypalLink}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#00ff88;color:#000;font-weight:700;border-radius:8px;text-decoration:none">Enviar por PayPal →</a>
+          </div>`;
+        await sendGmailNotification(emailSubject, emailHtml);      }
     }
 
     // Registrar transacción
