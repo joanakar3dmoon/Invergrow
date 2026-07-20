@@ -579,32 +579,38 @@ Usa emojis con moderación. Sé conciso pero completo. Cuando calcules proyeccio
 // ── Withdraw Tab ──────────────────────────────────────────────────────────────
 function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [amount, setAmount] = useState('');
+  const [iban, setIban] = useState(localStorage.getItem('invergrow_iban') || '');
+  const [ibanOwner, setIbanOwner] = useState(localStorage.getItem('invergrow_iban_owner') || '');
+  const [method, setMethod] = useState<'paypal'|'iban'>(localStorage.getItem('invergrow_method') as any || 'paypal');
   const [loading, setLoading] = useState(false);
   const [reinvestPct, setReinvestPct] = useState(30);
 
+  function savePrefs() {
+    localStorage.setItem('invergrow_iban', iban);
+    localStorage.setItem('invergrow_iban_owner', ibanOwner);
+    localStorage.setItem('invergrow_method', method);
+  }
+
   async function handleWithdraw() {
     const amt = parseFloat(amount);
-    if (!amt || amt <= 0 || amt > state.balance) {
-      showToast('error', 'Cantidad inválida');
-      return;
-    }
+    if (!amt || amt <= 0 || amt > state.balance) { showToast('error', 'Cantidad inválida'); return; }
+    if (method === 'iban' && !iban) { showToast('error', 'Introduce tu IBAN'); return; }
+    savePrefs();
     setLoading(true);
-    await onWithdraw(amt);
+    await onWithdraw(amt, method, iban, ibanOwner);
     setAmount('');
     setLoading(false);
-    showToast('success', `Retiro de €${fmt(amt)} solicitado`);
   }
+
+  const toReceive = parseFloat(amount||'0') * (1 - reinvestPct/100);
+  const toReinvest = parseFloat(amount||'0') * reinvestPct/100;
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'24px',maxWidth:'700px',margin:'0 auto'}}>
       <GlassCard className="p-8" glow="#00ff88">
+        {/* Balance */}
         <div style={{textAlign:'center',marginBottom:'32px'}}>
-          <div style={{
-            width:72,height:72,borderRadius:'50%',
-            background:'linear-gradient(135deg,#00ff88,#00d4ff)',
-            display:'flex',alignItems:'center',justifyContent:'center',
-            margin:'0 auto 16px',boxShadow:'0 0 40px rgba(0,255,136,0.3)'
-          }}>
+          <div style={{width:72,height:72,borderRadius:'50%',background:'linear-gradient(135deg,#00ff88,#00d4ff)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',boxShadow:'0 0 40px rgba(0,255,136,0.3)'}}>
             <Banknote size={32} color="#000"/>
           </div>
           <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginBottom:'8px'}}>Balance disponible</div>
@@ -613,22 +619,52 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
           </div>
         </div>
 
+        {/* Método */}
+        <div style={{display:'flex',gap:'12px',marginBottom:'20px'}}>
+          {(['paypal','iban'] as const).map(m => (
+            <button key={m} onClick={()=>setMethod(m)} style={{
+              flex:1,padding:'12px',borderRadius:'12px',border:'none',cursor:'pointer',fontWeight:700,fontSize:'13px',
+              background: method===m ? 'linear-gradient(135deg,#00ff88,#00d4ff)' : 'rgba(255,255,255,0.05)',
+              color: method===m ? '#000' : 'rgba(255,255,255,0.5)',
+              transition:'all 0.2s'
+            }}>
+              {m==='paypal' ? '🅿️ PayPal' : '🏦 IBAN'}
+            </button>
+          ))}
+        </div>
+
+        {/* Campos IBAN */}
+        {method === 'iban' && (
+          <div style={{marginBottom:'20px',display:'flex',flexDirection:'column',gap:'12px'}}>
+            <div>
+              <div style={{color:'rgba(255,255,255,0.4)',fontSize:'12px',marginBottom:'6px'}}>IBAN</div>
+              <input value={iban} onChange={e=>setIban(e.target.value.toUpperCase())}
+                placeholder="ES00 0000 0000 0000 0000 0000"
+                style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'12px',padding:'12px 16px',color:'#fff',fontSize:'14px',fontFamily:"'JetBrains Mono',monospace",outline:'none',boxSizing:'border-box'}}
+              />
+            </div>
+            <div>
+              <div style={{color:'rgba(255,255,255,0.4)',fontSize:'12px',marginBottom:'6px'}}>Titular</div>
+              <input value={ibanOwner} onChange={e=>setIbanOwner(e.target.value)}
+                placeholder="Nombre Apellido"
+                style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'12px',padding:'12px 16px',color:'#fff',fontSize:'14px',outline:'none',boxSizing:'border-box'}}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Cantidad */}
         <div style={{marginBottom:'20px'}}>
           <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginBottom:'8px'}}>Cantidad a retirar</div>
           <div style={{position:'relative'}}>
             <span style={{position:'absolute',left:'16px',top:'50%',transform:'translateY(-50%)',color:'#00ff88',fontWeight:700,fontSize:'18px'}}>€</span>
-            <input
-              type="number" value={amount} onChange={e=>setAmount(e.target.value)}
-              placeholder="0.00"
-              style={{
-                width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.3)',
-                borderRadius:'14px',padding:'16px 16px 16px 36px',color:'#fff',fontSize:'24px',
-                fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",outline:'none',boxSizing:'border-box'
-              }}
+            <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"
+              style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'14px',padding:'16px 16px 16px 36px',color:'#fff',fontSize:'24px',fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",outline:'none',boxSizing:'border-box'}}
             />
           </div>
         </div>
 
+        {/* Reinversión */}
         <div style={{marginBottom:'24px'}}>
           <div style={{display:'flex',justifyContent:'space-between',marginBottom:'8px'}}>
             <span style={{color:'rgba(255,255,255,0.4)',fontSize:'13px'}}>Reinvertir automáticamente</span>
@@ -637,24 +673,18 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
           <input type="range" min={0} max={100} value={reinvestPct} onChange={e=>setReinvestPct(+e.target.value)}
             style={{width:'100%',accentColor:'#00ff88',height:'6px'}}/>
           <div style={{display:'flex',justifyContent:'space-between',marginTop:'6px'}}>
-            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>Recibes: <strong style={{color:'#fff'}}>€{fmt(parseFloat(amount||'0')*(1-reinvestPct/100))}</strong></span>
-            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>Reinviertes: <strong style={{color:'#f59e0b'}}>€{fmt(parseFloat(amount||'0')*reinvestPct/100)}</strong></span>
+            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>Recibes: <strong style={{color:'#fff'}}>€{fmt(toReceive)}</strong></span>
+            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>Reinviertes: <strong style={{color:'#f59e0b'}}>€{fmt(toReinvest)}</strong></span>
           </div>
         </div>
 
+        {/* Botón */}
         <button onClick={handleWithdraw} disabled={loading||!amount}
-          style={{
-            width:'100%',padding:'16px',borderRadius:'14px',border:'none',cursor:'pointer',
-            background:'linear-gradient(135deg,#00ff88,#00d4ff)',
-            color:'#000',fontWeight:800,fontSize:'16px',fontFamily:"'Space Grotesk',sans-serif",
-            opacity: loading||!amount ? 0.5 : 1,
-            boxShadow:'0 0 30px rgba(0,255,136,0.3)',
-            transition:'all 0.2s'
-          }}>
-          {loading ? 'Procesando...' : '💸 Solicitar retiro a PayPal'}
+          style={{width:'100%',padding:'16px',borderRadius:'14px',border:'none',cursor:'pointer',background:'linear-gradient(135deg,#00ff88,#00d4ff)',color:'#000',fontWeight:800,fontSize:'16px',fontFamily:"'Space Grotesk',sans-serif",opacity:loading||!amount?0.5:1,boxShadow:'0 0 30px rgba(0,255,136,0.3)',transition:'all 0.2s'}}>
+          {loading ? 'Procesando...' : method==='iban' ? '🏦 Solicitar retiro por IBAN' : '💸 Solicitar retiro a PayPal'}
         </button>
         <div style={{textAlign:'center',marginTop:'12px',color:'rgba(255,255,255,0.2)',fontSize:'12px',fontFamily:"'JetBrains Mono',monospace"}}>
-          joanlazaro83@gmail.com
+          {method==='iban' ? (iban || 'Sin IBAN guardado') : 'joanlazaro83@gmail.com'}
         </div>
       </GlassCard>
 
@@ -833,17 +863,17 @@ export default function App() {
     } catch {}
   }
 
-  async function handleWithdraw(amount: number) {
+  async function handleWithdraw(amount: number, method = 'paypal', iban = '', ibanOwner = '') {
     try {
       const res = await fetch(`${BACKEND}/api/withdraw`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ amount })
+        body: JSON.stringify({ amount, method, iban, ibanOwner })
       });
       const data = await res.json();
       await fetchState();
       if (data.success) {
-        if (data.paypalError) {
-          showToast('info', `Retiro de €${amount.toFixed(2)} registrado — se procesará en 24-48h`);
+        if (data.paypalError || method === 'iban') {
+          showToast('info', `✅ Retiro de €${amount.toFixed(2)} registrado — recibirás email con instrucciones`);
         } else {
           showToast('success', `✅ Retiro de €${amount.toFixed(2)} enviado a PayPal`);
         }
