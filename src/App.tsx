@@ -975,7 +975,7 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-32 md:pb-8" style={{ touchAction: 'pan-y', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-32 md:pb-8">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
             <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor:'rgba(0,255,136,0.2)', borderTopColor:'#00ff88' }}/>
