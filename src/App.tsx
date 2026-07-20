@@ -1,4 +1,67 @@
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, TrendingDown, DollarSign, Wallet, Clock, RefreshCw, Server, Shield, AlertCircle, ArrowUpRight, ArrowDownLeft, Activity, Users, CheckCircle2, ArrowRight, Sparkles, ShoppingCart, Megaphone } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { SystemState, Transaction, Collaborator, WebhookLog } from './types';
+import DownloadCard from './components/DownloadCard';
+import WebhookConsole from './components/WebhookConsole';
+import CollaboratorsPanel from './components/CollaboratorsPanel';
+import WithdrawalForm from './components/WithdrawalForm';
+import AIEnginePanel from './components/AIEnginePanel';
+import AffiliatePanel from './components/AffiliatePanel';
+import OwnerWithdrawPanel from './components/OwnerWithdrawPanel';
 
+export default function App() {
+  const [state, setState] = useState<SystemState>({ balance: 15420.50, investedCapital: 42000.00, totalWithdrawals: 2850.00, reinvestmentFund: 350.00, netGains: 185.20, collaborators: [], transactions: [], webhookLogs: [], aiWorkers: [], aiLogs: [], apiConfig: { geminiConnected: false, distributionWebhook: '', targetMarket: '', payoutModel: 'SPLIT_70_30' } });
+  const [activeTab, setActiveTab] = useState<'ai' | 'finance' | 'affiliate' | 'owner'>('ai');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const showToast = (type: 'success' | 'error', text: string) => { setStatusMsg({ type, text }); setTimeout(() => setStatusMsg(null), 5000); };
+
+  const fetchState = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try { const res = await fetch('/api/data'); if (!res.ok) throw new Error('Error recuperando datos.'); const data = await res.json(); setState(data); setError(null); }
+    catch (err: any) { console.error(err); setError('No se pudo conectar con el servidor. Reintentando...'); }
+    finally { if (!silent) setLoading(false); }
+  };
+
+  useEffect(() => { fetchState(); const interval = setInterval(() => fetchState(true), 3000); return () => clearInterval(interval); }, []);
+
+  const handleRefresh = async () => { setIsRefreshing(true); await fetchState(); setIsRefreshing(false); showToast('success', 'Panel actualizado.'); };
+
+  const handleWithdraw = async (data: { amount: number; description: string; gateway: 'STRIPE' | 'CUSTOM'; reference: string }) => {
+    try {
+      const res = await fetch('/api/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Error registrando retiro.'); }
+      const updated = await res.json(); setState(updated.data);
+      showToast('success', `Retiro de EUR${data.amount} solicitado. Ref: ${data.reference}`);
+    } catch (err: any) { showToast('error', err.message || 'Error al procesar.'); throw err; }
+  };
+
+  const handleAddCollaborator = async (col: { name: string; role: string; wage: number }) => {
+    try {
+      const res = await fetch('/api/collaborators', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(col) });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Error registrando colaborador.'); }
+      const updated = await res.json(); setState(updated.data); showToast('success', `Colaborador: ${col.name}.`);
+    } catch (err: any) { showToast('error', err.message || 'Error.'); throw err; }
+  };
+
+  const handleTriggerPayrollWebhook = async (colId: string, amount: number) => { await handleInjectWebhook({ event: "collaborator_payment_confirmed", collaboratorId: colId, amount }); };
+
+  const handleInjectWebhook = async (payload: any) => {
+    try {
+      const res = await fetch('/api/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Error de webhook.');
+      setState(result.data); showToast('success', `Webhook procesado: ${payload.event || payload.type}`);
+    } catch (err: any) { showToast('error', `Fallo Webhook: ${err.message}`); throw err; }
+  };
+
+  const handleResetSystem = async () => {
+    try { const res = await fetch('/api/reset', { method: 'POST' }); if (!res.ok) throw new Error('Error al restablecer.'); const result = await res.json(); setState(result.data); showToast('success', 'Sistema reseteado.'); }
+    catch (err: any) { showToast('error', err.message || 'Error al resetear.'); }
+  };
 
   return (
     <div id="invergrow-dashboard-root" className="min-h-screen bg-black text-zinc-100 font-sans antialiased pb-16">
@@ -7,7 +70,7 @@
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center font-bold text-lg text-black shadow-lg">IG</div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">InverGrow <span className="text-xs font-mono text-emerald-400 px-2 py-0.5 bg-emerald-950/50 border border-emerald-800/40 rounded-full">v1.3</span></h1>
+              <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">InverGrow <span className="text-xs font-mono text-emerald-400 px-2 py-0.5 bg-emerald-950/50 border border-emerald-800/40 rounded-full">v1.2</span></h1>
               <p className="text-[10px] text-zinc-500 font-mono tracking-wider uppercase">Plataforma de Reinversion & Nominas</p>
             </div>
           </div>
@@ -21,15 +84,8 @@
           </div>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        <AnimatePresence>
-          {statusMsg && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className={`fixed top-20 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium ${statusMsg.type === 'success' ? 'bg-emerald-950 border-emerald-700 text-emerald-300' : 'bg-red-950 border-red-700 text-red-300'}`}>
-              {statusMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-              {statusMsg.text}
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+      <main className="max-w-7xl mx-auto px-6 pt-8 space-y-6">
         {error && <div className="p-4 bg-amber-950/20 border border-amber-900/40 text-amber-400 rounded-2xl flex items-center gap-3 text-sm"><AlertCircle className="w-5 h-5 shrink-0" /><span>{error}</span></div>}
         {loading ? (
           <div className="py-24 text-center"><RefreshCw className="w-10 h-10 text-emerald-500 animate-spin mx-auto mb-4" /><p className="text-zinc-400">Cargando...</p></div>
@@ -57,12 +113,14 @@
                 <p className="text-[11px] text-zinc-500">Conciliacion de sueldos automatizada</p>
               </div>
             </section>
+
             <div className="flex flex-wrap border-b border-zinc-800 gap-6 mt-2 mb-4">
               <button onClick={() => setActiveTab('ai')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'ai' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" /> Factoria IA</button>
               <button onClick={() => setActiveTab('finance')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'finance' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><DollarSign className="w-4 h-4 text-emerald-500" /> Finanzas & Nominas</button>
               <button onClick={() => setActiveTab('affiliate')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'affiliate' ? 'border-orange-500 text-orange-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><ShoppingCart className="w-4 h-4 text-orange-400" /> Afiliados & AdSense</button>
               <button onClick={() => setActiveTab('owner')} className={`pb-3 text-sm font-bold tracking-wide transition-all cursor-pointer border-b-2 flex items-center gap-2 ${activeTab === 'owner' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Shield className="w-4 h-4 text-emerald-400" /> Retiros Propietario</button>
             </div>
+
             {activeTab === 'ai' ? (
               <AIEnginePanel state={state} onRefresh={handleRefresh} showToast={showToast} setState={setState} />
             ) : activeTab === 'affiliate' ? (
@@ -146,3 +204,4 @@
     </div>
   );
 }
+
