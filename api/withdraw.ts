@@ -120,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const state = await getState();
-      const availableNet = parseFloat((state.netGains || 0).toFixed(2));
+      const availableNet = parseFloat((state.balance ?? state.netGains ?? 0).toFixed(2));
 
       if (amt > availableNet) {
         return res.status(400).json({
@@ -158,7 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Actualizar estado
-      state.netGains = parseFloat((availableNet - amt).toFixed(2));
+      state.balance = parseFloat((availableNet - amt).toFixed(2));
+      state.netGains = parseFloat(((state.netGains || 0) - amt).toFixed(2));
       state.totalWithdrawals = parseFloat(((state.totalWithdrawals || 0) + amt).toFixed(2));
 
       if (!state.transactions) state.transactions = [];
