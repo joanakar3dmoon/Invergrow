@@ -93,28 +93,150 @@ async function handleData(req: VercelRequest, res: VercelResponse) {
   });
 }
 
+// ─── PayPal Payouts (Live) ───────────────────────────────────────────────────
+const PAYPAL_CLIENT_ID  = process.env.PAYPAL_CLIENT_ID  || '';
+const PAYPAL_SECRET     = process.env.PAYPAL_SECRET     || '';
+const PAYPAL_ENV        = process.env.PAYPAL_ENV        || 'live';
+const PAYPAL_BASE       = PAYPAL_ENV === 'live'
+  ? 'https://api-m.paypal.com'
+  : 'https://api-m.sandbox.paypal.com';
+
+async function getPayPalToken(): Promise<string> {
+  const creds = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString('base64');
+  const res = await fetch(`${PAYPAL_BASE}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${creds}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
+  const data = await res.json() as any;
+  if (!data.access_token) throw new Error(`PayPal auth error: ${JSON.stringify(data)}`);
+  return data.access_token;
+}
+
+async function sendPayPalPayout(amountEur: number, recipientEmail: string, note: string): Promise<{ batchId: string; status: string }> {
+  const token = await getPayPalToken();
+  const batchId = `INV-${Date.now()}`;
+  const body = {
+    sender_batch_header: {
+      sender_batch_id: batchId,
+      email_subject: 'Retiro InverGrow',
+      email_message: note || 'Tu retiro de InverGrow ha sido procesado.',
+    },
+    items: [{
+      recipient_type: 'EMAIL',
+      amount: { value: amountEur.toFixed(2), currency: 'EUR' },
+      note: note || 'Retiro InverGrow',
+      sender_item_id: `item-${Date.now()}`,
+      receiver: recipientEmail,
+    }],
+  };
+  const res = await fetch(`${PAYPAL_BASE}/v1/payments/payouts`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json() as any;
+  if (!res.ok) throw new Error(`PayPal payout error: ${JSON.stringify(data)}`);
+  return {
+    batchId: data.batch_header?.payout_batch_id || batchId,
+    status: data.batch_header?.batch_status || 'PENDING',
+  };
+}
+
 async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   if (req.method === 'GET') {
     const state = await getState();
     const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=20');
-    return res.status(200).json({ balance: parseFloat(state.balance) || 0, netGains: parseFloat(state.net_gains) || 0, totalWithdrawals: parseFloat(state.total_withdrawals) || 0, transactions: Array.isArray(txArr) ? txArr : [] });
+    return res.status(200).json({
+      balance: parseFloat(state.balance) || 0,
+      netGains: parseFloat(state.net_gains) || 0,
+      totalWithdrawals: parseFloat(state.total_withdrawals) || 0,
+      transactions: Array.isArray(txArr) ? txArr : [],
+      paypalConnected: !!(PAYPAL_CLIENT_ID && PAYPAL_SECRET),
+      paypalEnv: PAYPAL_ENV,
+    });
   }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
+
   try {
-    const { amount, method = 'paypal', adminCode, description } = req.body || {};
-    if (adminCode && adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const { amount, adminCode, recipientEmail, note } = req.body || {};
+
+    if (adminCode && adminCode !== ADMIN_CODE) {
+      return res.status(403).json({ error: 'Código admin incorrecto' });
+    }
+
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: 'Importe inválido' });
+
     const state = await getState();
     const available = parseFloat((state.balance || 0).toFixed(2));
-    if (amt > available) return res.status(400).json({ error: `Saldo insuficiente. Disponible: €${available.toFixed(2)}`, available });
-    const newBalance = parseFloat((available - amt).toFixed(2));
+    if (amt > available) {
+      return res.status(400).json({ error: `Saldo insuficiente. Disponible: €${available.toFixed(2)}`, available });
+    }
+
+    // Descontar saldo ANTES del envío
+    const newBalance     = parseFloat((available - amt).toFixed(2));
     const newWithdrawals = parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2));
-    const ref = `WD-${Date.now()}`;
     await patchState({ balance: newBalance, total_withdrawals: newWithdrawals });
-    await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({ type: 'WITHDRAWAL', amount: amt, status: 'COMPLETED', reference: ref, description: description || `Retiro ${method}`, gateway: method.toUpperCase() }) });
-    return res.status(200).json({ success: true, reference: ref, amount: amt, newBalance, totalWithdrawals: newWithdrawals, message: `Retiro de €${amt.toFixed(2)} procesado correctamente.` });
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+
+    // Enviar via PayPal Payouts
+    const email = recipientEmail || 'joanlazaro83@gmail.com';
+    const ref   = `WD-${Date.now()}`;
+    let paypalBatchId = '';
+    let paypalStatus  = 'COMPLETED';
+    let paypalMsg     = `Retiro de €${amt.toFixed(2)} procesado correctamente.`;
+
+    if (PAYPAL_CLIENT_ID && PAYPAL_SECRET) {
+      try {
+        const payout = await sendPayPalPayout(amt, email, note || `Retiro InverGrow ${ref}`);
+        paypalBatchId = payout.batchId;
+        paypalStatus  = payout.status;
+        paypalMsg     = `Retiro de €${amt.toFixed(2)} enviado a ${email} via PayPal. Batch: ${paypalBatchId}`;
+      } catch (ppErr: any) {
+        // Si PayPal falla, restaurar saldo
+        await patchState({ balance: available, total_withdrawals: state.total_withdrawals });
+        return res.status(502).json({ error: `Error PayPal: ${ppErr.message}` });
+      }
+    }
+
+    // Registrar transacción
+    await supa('invergrow_transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'WITHDRAWAL',
+        amount: amt,
+        status: paypalStatus,
+        reference: ref,
+        description: `Retiro PayPal → ${email}`,
+        gateway: 'PAYPAL',
+      }),
+    });
+
+    return res.status(200).json({
+      success: true,
+      reference: ref,
+      batchId: paypalBatchId,
+      amount: amt,
+      newBalance,
+      totalWithdrawals: newWithdrawals,
+      destination: email,
+      message: paypalMsg,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 }
 
 async function handleIncome(req: VercelRequest, res: VercelResponse) {
