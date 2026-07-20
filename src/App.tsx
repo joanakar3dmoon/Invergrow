@@ -23,11 +23,37 @@ const YT = {
   ]
 };
 
-const ADMOB = [
-  { app: 'Lanzarus',  revenue: 8.20,  ecpm: 1.40, impressions: 5840, color: '#00ff88' },
-  { app: 'r3dm/guia', revenue: 5.60,  ecpm: 0.90, impressions: 6222, color: '#00d4ff' },
-  { app: 'Nexusia',   revenue: 3.10,  ecpm: 0.75, impressions: 4133, color: '#a855f7' },
+const ADMOB_DEFAULT = [
+  { app: 'Lanzarus',  revenue: 0, ecpm: 0, impressions: 0, color: '#00ff88' },
+  { app: 'r3dm/guia', revenue: 0, ecpm: 0, impressions: 0, color: '#00d4ff' },
+  { app: 'Nexusia',   revenue: 0, ecpm: 0, impressions: 0, color: '#a855f7' },
 ];
+
+// Hook: datos reales desde NexusAI backend
+function useAdMobData() {
+  const [admob, setAdmob] = React.useState(ADMOB_DEFAULT);
+  const [updated, setUpdated] = React.useState('—');
+  React.useEffect(() => {
+    const load = async () => {
+      try {
+        const r = await fetch('https://nexusai-backend-z10k.onrender.com/admob/stats');
+        if (r.ok) {
+          const d = await r.json();
+          if (d.apps && d.apps.length > 0) {
+            setAdmob(d.apps);
+            setUpdated(new Date().toLocaleTimeString('es-ES'));
+          }
+        }
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, []);
+  return { admob, updated };
+}
+
+const ADMOB = ADMOB_DEFAULT; // overridden by useAdMobData in component
 
 const AFFILIATE_PRODUCTS = [
   { name: 'Auriculares Sony WH-1000XM5', clicks: 84, sales: 3, commission: 4.20 },
@@ -721,7 +747,7 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
 
             {/* Per App */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {ADMOB.map((a, i) => (
+              {ADMOB_LIVE.map((a, i) => (
                 <Card key={i} delay={i*0.07} style={{ border: `1px solid ${a.color}15` }}>
                   <div className="absolute top-0 right-0 w-20 h-20 rounded-full blur-3xl pointer-events-none" style={{ background: `${a.color}08` }} />
                   <div className="relative z-10">
@@ -853,6 +879,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function App() {
+  const { admob: ADMOB_LIVE, updated: admobUpdated } = useAdMobData();
   const [state, setState] = useState<SystemState>({
     balance: 0, investedCapital: 0, totalWithdrawals: 0,
     reinvestmentFund: 0, netGains: 0,
