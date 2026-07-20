@@ -2,8 +2,20 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/index.ts": { "maxDuration": 30 }
+  },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/api/data",             "destination": "/api/index.ts" },
+    { "source": "/api/withdraw",         "destination": "/api/index.ts" },
+    { "source": "/api/income",           "destination": "/api/index.ts" },
+    { "source": "/api/reinvest",         "destination": "/api/index.ts" },
+    { "source": "/api/youtube",          "destination": "/api/index.ts" },
+    { "source": "/api/youtube-callback", "destination": "/api/index.ts" },
+    { "source": "/api/admob",            "destination": "/api/index.ts" },
+    { "source": "/api/sync",             "destination": "/api/index.ts" },
+    { "source": "/api/webhook",          "destination": "/api/index.ts" },
+    { "source": "/api/:path*",           "destination": "/api/index.ts" },
+    { "source": "/((?!api/).*)",         "destination": "/index.html" }
   ]
 }
