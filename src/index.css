@@ -32,11 +32,13 @@ body {
   background: var(--bg0);
   color: var(--text1);
   min-height: 100%;
-  height: 100%;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
   -webkit-font-smoothing: antialiased;
+}
+#root {
+  min-height: 100vh;
 }
 
 /* ─── BACKGROUND ─────────────────────────────────────────────────── */
