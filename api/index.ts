@@ -63,56 +63,27 @@ async function exchangeForAccessToken(refreshToken: string, clientId: string, cl
 }
 
 
-// ─── Gmail notification helper ────────────────────────────────────────────────
-const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || '';
-const GMAIL_CLIENT_ID     = process.env.YT_CLIENT_ID || '';
-const GMAIL_CLIENT_SECRET = process.env.YT_CLIENT_SECRET || '';
+// ─── Resend email helper ────────────────────────────────────────────────────
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 
 async function sendGmailNotification(subject: string, htmlBody: string): Promise<void> {
   try {
-    if (!GMAIL_REFRESH_TOKEN || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) return;
-    // Obtener access token
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: GMAIL_CLIENT_ID,
-        client_secret: GMAIL_CLIENT_SECRET,
-        refresh_token: GMAIL_REFRESH_TOKEN,
-        grant_type: 'refresh_token',
-      }),
-    });
-    const tokenData = await tokenRes.json() as any;
-    if (!tokenData.access_token) return;
-
-    // Construir email RFC 2822
-    const to = 'joanlazaro83@gmail.com';
-    const from = 'joanlazaro83@gmail.com';
-    const boundary = 'boundary_invergrow';
-    const raw = [
-      `From: InverGrow <${from}>`,
-      `To: ${to}`,
-      `Subject: ${subject}`,
-      'MIME-Version: 1.0',
-      `Content-Type: text/html; charset=UTF-8`,
-      '',
-      htmlBody,
-    ].join('\r\n');
-
-    const encoded = Buffer.from(raw).toString('base64')
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-    await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    if (!RESEND_API_KEY) return;
+    await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
+        Authorization: `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ raw: encoded }),
+      body: JSON.stringify({
+        from: 'InverGrow <onboarding@resend.dev>',
+        to: ['joanlazaro83@gmail.com'],
+        subject,
+        html: htmlBody,
+      }),
     });
   } catch (e) {
-    // Silenciar errores de email — no bloquean el retiro
-    console.error('Gmail notify error:', e);
+    console.error('Resend notify error:', e);
   }
 }
 
