@@ -14,7 +14,7 @@ import { SystemState } from './types';
 const fmt  = (n: number) => n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtK = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}K` : `${n}`;
 const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY || '';
-const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://invergrow.onrender.com';
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://invergrow.vercel.app';
 
 // ── Datos reales del usuario ───────────────────────────────────────────────────
 const ADMOB_DATA = [
