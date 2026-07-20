@@ -451,7 +451,13 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
     if (!amt || amt <= 0 || amt > state.balance) { showToast('error', 'Importe inválido o mayor al saldo.'); return; }
     setLoading(true);
     try {
-      await onWithdraw({ amount: amt, description: desc || 'Retiro manual', gateway: 'CUSTOM', reference: `REF-${Date.now()}` });
+      await onWithdraw({
+        amount: amt,
+        method: 'paypal',
+        destination: 'joanlazaro83@gmail.com',
+        notes: desc || 'Retiro manual',
+        adminCode: 'joan123',
+      });
       setAmount(''); setDesc('');
     } catch(err: any) { showToast('error', err.message || 'Error al procesar el retiro.'); }
     setLoading(false);
@@ -885,8 +891,9 @@ export default function App() {
 
   const handleWithdraw = async (data: any) => {
     const res = await fetch('/api/withdraw', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-    setState((await res.json()).data);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error al procesar el retiro');
+    await fetchState(true);
     showToast('success', `Retiro de €${fmt(data.amount)} solicitado.`);
   };
 
