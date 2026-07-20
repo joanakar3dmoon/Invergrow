@@ -62,6 +62,60 @@ async function exchangeForAccessToken(refreshToken: string, clientId: string, cl
   return data.access_token;
 }
 
+
+// ─── Gmail notification helper ────────────────────────────────────────────────
+const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || '';
+const GMAIL_CLIENT_ID     = process.env.YT_CLIENT_ID || '';
+const GMAIL_CLIENT_SECRET = process.env.YT_CLIENT_SECRET || '';
+
+async function sendGmailNotification(subject: string, htmlBody: string): Promise<void> {
+  try {
+    if (!GMAIL_REFRESH_TOKEN || !GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) return;
+    // Obtener access token
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: GMAIL_CLIENT_ID,
+        client_secret: GMAIL_CLIENT_SECRET,
+        refresh_token: GMAIL_REFRESH_TOKEN,
+        grant_type: 'refresh_token',
+      }),
+    });
+    const tokenData = await tokenRes.json() as any;
+    if (!tokenData.access_token) return;
+
+    // Construir email RFC 2822
+    const to = 'joanlazaro83@gmail.com';
+    const from = 'joanlazaro83@gmail.com';
+    const boundary = 'boundary_invergrow';
+    const raw = [
+      `From: InverGrow <${from}>`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      `Content-Type: text/html; charset=UTF-8`,
+      '',
+      htmlBody,
+    ].join('\r\n');
+
+    const encoded = Buffer.from(raw).toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw: encoded }),
+    });
+  } catch (e) {
+    // Silenciar errores de email — no bloquean el retiro
+    console.error('Gmail notify error:', e);
+  }
+}
+
 // ─── Route handlers ───────────────────────────────────────────────────────────
 
 async function handleData(req: VercelRequest, res: VercelResponse) {
@@ -219,12 +273,31 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
             gateway: 'PAYPAL',
           }),
         });
+        // Enviar email de aviso para procesar manualmente
+        const paypalLink = `https://www.paypal.com/myaccount/transfer/send?recipient=${encodeURIComponent(email)}&amount=${amt.toFixed(2)}&currencyCode=EUR`;
+        await sendGmailNotification(
+          `💸 InverGrow — Retiro pendiente €${amt.toFixed(2)}`,
+          `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#040608;color:#fff;padding:32px;border-radius:16px">
+            <h2 style="color:#00ff88;margin-bottom:8px">💸 Retiro pendiente de procesar</h2>
+            <p style="color:#aaa;margin-bottom:24px">InverGrow ha registrado un retiro que necesita procesarse manualmente.</p>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+              <tr><td style="padding:8px;color:#888">Referencia</td><td style="padding:8px;color:#fff;font-family:monospace">${ref}</td></tr>
+              <tr style="background:rgba(255,255,255,0.04)"><td style="padding:8px;color:#888">Importe</td><td style="padding:8px;color:#00ff88;font-weight:bold;font-size:20px">€${amt.toFixed(2)}</td></tr>
+              <tr><td style="padding:8px;color:#888">Destino</td><td style="padding:8px;color:#fff">${email}</td></tr>
+              <tr style="background:rgba(255,255,255,0.04)"><td style="padding:8px;color:#888">Fecha</td><td style="padding:8px;color:#fff">${new Date().toLocaleString('es-ES')}</td></tr>
+            </table>
+            <a href="${paypalLink}" style="display:inline-block;background:linear-gradient(135deg,#00ff88,#00d4ff);color:#040608;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:16px">
+              👉 Enviar €${amt.toFixed(2)} por PayPal
+            </a>
+            <p style="color:#555;font-size:12px;margin-top:24px">InverGrow · Sistema de ingresos pasivos</p>
+          </div>`
+        );
         return res.status(200).json({
           success: true,
           reference: ref,
           amount: amt,
           status: 'PENDING',
-          message: `Retiro de €${amt.toFixed(2)} registrado. Se procesará manualmente en 24-48h a ${email}.`,
+          message: `Retiro de €${amt.toFixed(2)} registrado. Te hemos enviado un email con el enlace para procesarlo manualmente.`,
           paypalError: true,
         });
       }
