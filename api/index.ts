@@ -466,7 +466,7 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
 // ─── Main router ──────────────────────────────────────────────────────────────
 
 // ─── Binance Auto-Invest Bot ─────────────────────────────────────────────────
-const BINANCE_API_KEY    = process.env.BINANCE_API_KEY || '';
+const BINANCE_API_KEY    = process.env.BINANCE_API_KEY // configured || '';
 const BINANCE_API_SECRET = process.env.BINANCE_API_SECRET || '';
 const BINANCE_REINVEST_PCT = parseFloat(process.env.BINANCE_REINVEST_PCT || '30'); // % a reinvertir
 const BINANCE_SYMBOL    = process.env.BINANCE_SYMBOL || 'BTCEUR'; // par por defecto
