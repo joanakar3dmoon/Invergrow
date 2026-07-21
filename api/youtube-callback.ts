@@ -14,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!code) {
-    return res.status(400).send('<h2>No se recibio codigo de autorizacion.</h2>');
+    return res.status(400).send('<h2>No se recibió código de autorización.</h2>');
   }
 
   try {
@@ -33,10 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tokens = await tokenRes.json() as any;
 
     if (!tokens.refresh_token) {
-      const debugInfo = `CLIENT_ID_PREFIX: ${YT_CLIENT_ID ? YT_CLIENT_ID.substring(0,25) : 'UNDEFINED'}`;
-      return res.status(400).send(`<h2>No se obtuvo refresh_token. [${debugInfo}] Respuesta: ${JSON.stringify(tokens)}</h2>`);
+      return res.status(400).send(`<h2>No se obtuvo refresh_token. Respuesta: ${JSON.stringify(tokens)}</h2>`);
     }
 
+    // Guardar YouTube + AdMob (mismo token, scopes combinados)
     await fetch(`${SUPABASE_URL}/rest/v1/invergrow_state?id=eq.main`, {
       method: 'PATCH',
       headers: {
@@ -54,9 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).send(`
       <html>
         <body style="font-family:sans-serif;text-align:center;padding:40px;background:#040608;color:#fff">
-          <h1 style="color:#00ff88">YouTube + AdMob conectados</h1>
+          <h1 style="color:#00ff88">✅ YouTube + AdMob conectados</h1>
           <p>Tokens reales guardados correctamente.</p>
-          <a href="https://invergrow.vercel.app" style="color:#00ff88">Volver a InverGrow</a>
+          <p style="color:rgba(255,255,255,0.4);font-size:12px">Puedes cerrar esta ventana y volver a InverGrow.</p>
+          <a href="https://invergrow.vercel.app" style="color:#00ff88">← Volver a InverGrow</a>
         </body>
       </html>
     `);
