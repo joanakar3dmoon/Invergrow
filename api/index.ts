@@ -464,6 +464,107 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
 }
 
 // ─── Main router ──────────────────────────────────────────────────────────────
+
+// ─── Binance Auto-Invest Bot ─────────────────────────────────────────────────
+const BINANCE_API_KEY    = process.env.BINANCE_API_KEY || '';
+const BINANCE_API_SECRET = process.env.BINANCE_API_SECRET || '';
+const BINANCE_REINVEST_PCT = parseFloat(process.env.BINANCE_REINVEST_PCT || '30'); // % a reinvertir
+const BINANCE_SYMBOL    = process.env.BINANCE_SYMBOL || 'BTCEUR'; // par por defecto
+
+async function binanceRequest(method: string, path: string, params: Record<string,string> = {}) {
+  const crypto = await import('crypto');
+  const timestamp = Date.now().toString();
+  const queryParams = new URLSearchParams({ ...params, timestamp, recvWindow: '5000' });
+  const signature = crypto.createHmac('sha256', BINANCE_API_SECRET)
+    .update(queryParams.toString()).digest('hex');
+  queryParams.append('signature', signature);
+
+  const url = `https://api.binance.com${path}?${queryParams.toString()}`;
+  const res = await fetch(url, {
+    method,
+    headers: { 'X-MBX-APIKEY': BINANCE_API_KEY }
+  });
+  return res.json();
+}
+
+async function handleBinanceInvest(req: VercelRequest, res: VercelResponse) {
+  try {
+    if (!BINANCE_API_KEY || !BINANCE_API_SECRET) {
+      return res.status(400).json({ error: 'Binance API no configurada. Añade BINANCE_API_KEY y BINANCE_API_SECRET en Vercel.' });
+    }
+
+    // Obtener balance actual de InverGrow
+    const sbRes = await fetch(`${SUPABASE_URL}/rest/v1/apps?select=revenue`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    const apps = await sbRes.json() as any[];
+    const totalBalance = apps.reduce((sum: number, a: any) => sum + (parseFloat(a.revenue) || 0), 0);
+
+    const amountToInvest = parseFloat((totalBalance * BINANCE_REINVEST_PCT / 100).toFixed(2));
+
+    if (amountToInvest < 10) {
+      return res.json({ success: false, message: `Balance insuficiente para invertir. Mínimo €10, disponible: €${amountToInvest}` });
+    }
+
+    // Obtener precio actual del par
+    const tickerRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${BINANCE_SYMBOL}`);
+    const ticker = await tickerRes.json() as any;
+    const price = parseFloat(ticker.price);
+    const qty = parseFloat((amountToInvest / price).toFixed(6));
+
+    // Crear orden de compra a mercado
+    const order = await binanceRequest('POST', '/api/v3/order', {
+      symbol: BINANCE_SYMBOL,
+      side: 'BUY',
+      type: 'MARKET',
+      quoteOrderQty: amountToInvest.toString()
+    });
+
+    if (order.orderId) {
+      // Registrar en Supabase como retiro de reinversión
+      await fetch(`${SUPABASE_URL}/rest/v1/withdrawals`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          reference: `BNB-${order.orderId}`,
+          amount: amountToInvest,
+          status: 'COMPLETED',
+          gateway: 'BINANCE',
+          description: `Reinversión automática: ${qty} ${BINANCE_SYMBOL} @ €${price.toFixed(2)}`,
+          created_at: new Date().toISOString()
+        })
+      });
+
+      return res.json({
+        success: true,
+        orderId: order.orderId,
+        symbol: BINANCE_SYMBOL,
+        amount: amountToInvest,
+        qty,
+        price,
+        message: `✅ Invertidos €${amountToInvest} en ${BINANCE_SYMBOL} (${qty} unidades @ €${price.toFixed(2)})`
+      });
+    } else {
+      return res.json({ success: false, error: order.msg || 'Error en Binance', details: order });
+    }
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+async function handleBinanceStatus(req: VercelRequest, res: VercelResponse) {
+  try {
+    if (!BINANCE_API_KEY || !BINANCE_API_SECRET) {
+      return res.json({ connected: false, message: 'API no configurada' });
+    }
+    const account = await binanceRequest('GET', '/api/v3/account');
+    const balances = (account.balances || []).filter((b: any) => parseFloat(b.free) > 0);
+    return res.json({ connected: true, balances, reinvestPct: BINANCE_REINVEST_PCT, symbol: BINANCE_SYMBOL });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
@@ -483,6 +584,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'admob')                           return handleAdmob(req, res);
   if (path === 'sync')                            return handleSync(req, res);
   if (path === 'webhook')                         return handleWebhook(req, res);
+  if (path === 'binance/invest')                  return handleBinanceInvest(req, res);
+  if (path === 'binance/status')                  return handleBinanceStatus(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
