@@ -845,7 +845,6 @@ const DEFAULT_STATE: SystemState = {
   aiLogs: [], apiConfig: { geminiConnected: true, distributionWebhook:'', targetMarket:'ES', payoutModel:'SPLIT_70_30' }
 };
 
-export default 
 // ─── Binance Bot Panel ───────────────────────────────────────────────────────
 function BinanceBotPanel({ showToast, balance }: { showToast: any; balance: number }) {
   const [status, setStatus] = useState<any>(null);
@@ -1168,3 +1167,5 @@ function App() {
     </div>
   );
 }
+
+export default App;
