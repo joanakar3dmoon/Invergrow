@@ -828,11 +828,12 @@ function Toast({ toasts }: { toasts: any[] }) {
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
-type Tab = 'dashboard'|'bot'|'withdraw'|'admin';
+type Tab = 'dashboard'|'bot'|'binance'|'withdraw'|'admin';
 
 const TABS: {id:Tab; label:string; icon:React.ReactNode; color:string}[] = [
   {id:'dashboard', label:'Dashboard',   icon:<LayoutDashboard size={18}/>, color:'#00ff88'},
   {id:'bot',       label:'AI Asesor',   icon:<Brain size={18}/>,           color:'#00d4ff'},
+  {id:'binance',   label:'Bot ₿',       icon:<span style={{fontSize:'16px'}}>₿</span>,       color:'#f59e0b'},
   {id:'withdraw',  label:'Retiros',     icon:<CreditCard size={18}/>,      color:'#f59e0b'},
   {id:'admin',     label:'Admin',       icon:<Settings size={18}/>,        color:'#a855f7'},
 ];
@@ -844,7 +845,159 @@ const DEFAULT_STATE: SystemState = {
   aiLogs: [], apiConfig: { geminiConnected: true, distributionWebhook:'', targetMarket:'ES', payoutModel:'SPLIT_70_30' }
 };
 
-export default function App() {
+export default 
+// ─── Binance Bot Panel ───────────────────────────────────────────────────────
+function BinanceBotPanel({ showToast, balance }: { showToast: any; balance: number }) {
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [investing, setInvesting] = useState(false);
+  const [pct, setPct] = useState(30);
+
+  async function checkStatus() {
+    setLoading(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/binance/status`);
+      const d = await r.json();
+      setStatus(d);
+    } catch { showToast('error', 'Error al conectar con Binance'); }
+    setLoading(false);
+  }
+
+  async function invest() {
+    setInvesting(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/binance/invest`, { method: 'POST' });
+      const d = await r.json();
+      if (d.success) {
+        showToast('success', d.message);
+        checkStatus();
+      } else {
+        showToast('error', d.error || d.message || 'Error al invertir');
+      }
+    } catch { showToast('error', 'Error de conexión'); }
+    setInvesting(false);
+  }
+
+  const toInvest = parseFloat((balance * pct / 100).toFixed(2));
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:'20px',maxWidth:'700px',margin:'0 auto'}}>
+      <GlassCard className="p-8" glow="#f59e0b">
+        <div style={{textAlign:'center',marginBottom:'28px'}}>
+          <div style={{
+            width:72,height:72,borderRadius:'50%',
+            background:'linear-gradient(135deg,#f59e0b,#ff6b00)',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            margin:'0 auto 16px',boxShadow:'0 0 40px rgba(245,158,11,0.3)'
+          }}>
+            <span style={{fontSize:'32px'}}>₿</span>
+          </div>
+          <div style={{color:'#f59e0b',fontWeight:800,fontSize:'22px',fontFamily:"'Space Grotesk',sans-serif"}}>
+            Bot de Reinversión Binance
+          </div>
+          <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginTop:'8px'}}>
+            Invierte automáticamente tus ganancias en crypto
+          </div>
+        </div>
+
+        {!status?.connected ? (
+          <div style={{
+            background:'rgba(255,255,255,0.04)',borderRadius:'14px',padding:'20px',
+            border:'1px solid rgba(245,158,11,0.2)',textAlign:'center',marginBottom:'20px'
+          }}>
+            <div style={{color:'#f59e0b',fontWeight:700,marginBottom:'8px'}}>⚠️ Binance no conectado</div>
+            <div style={{color:'rgba(255,255,255,0.5)',fontSize:'13px',lineHeight:'1.6'}}>
+              Para activar el bot necesitas añadir en Vercel:<br/>
+              <code style={{color:'#00ff88',fontSize:'12px'}}>BINANCE_API_KEY</code> y <code style={{color:'#00ff88',fontSize:'12px'}}>BINANCE_API_SECRET</code>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background:'rgba(0,255,136,0.06)',borderRadius:'14px',padding:'16px',
+            border:'1px solid rgba(0,255,136,0.2)',marginBottom:'20px'
+          }}>
+            <div style={{color:'#00ff88',fontWeight:700,marginBottom:'12px'}}>✅ Binance conectado</div>
+            {(status.balances||[]).map((b:any,i:number)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',
+                borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                <span style={{color:'rgba(255,255,255,0.6)',fontSize:'13px'}}>{b.asset}</span>
+                <span style={{color:'#fff',fontWeight:600,fontSize:'13px'}}>{parseFloat(b.free).toFixed(6)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Slider reinversión */}
+        <div style={{marginBottom:'24px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
+            <span style={{color:'rgba(255,255,255,0.6)',fontSize:'14px'}}>% a reinvertir</span>
+            <span style={{color:'#f59e0b',fontWeight:700,fontSize:'16px'}}>{pct}%</span>
+          </div>
+          <input type="range" min={5} max={100} step={5} value={pct}
+            onChange={e=>setPct(Number(e.target.value))}
+            style={{width:'100%',accentColor:'#f59e0b',height:'6px'}}/>
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:'8px'}}>
+            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>
+              Invertir: <strong style={{color:'#f59e0b'}}>€{toInvest}</strong>
+            </span>
+            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>
+              Retener: <strong style={{color:'#00ff88'}}>€{fmt(balance - toInvest)}</strong>
+            </span>
+          </div>
+        </div>
+
+        <div style={{display:'flex',gap:'12px'}}>
+          <button onClick={checkStatus} disabled={loading}
+            style={{
+              flex:1,padding:'14px',borderRadius:'12px',border:'1px solid rgba(245,158,11,0.3)',
+              background:'transparent',color:'#f59e0b',fontWeight:700,fontSize:'14px',cursor:'pointer',
+              opacity: loading ? 0.5 : 1
+            }}>
+            {loading ? '...' : '🔄 Verificar estado'}
+          </button>
+          <button onClick={invest} disabled={investing || !status?.connected || toInvest < 10}
+            style={{
+              flex:2,padding:'14px',borderRadius:'12px',border:'none',cursor:'pointer',
+              background:'linear-gradient(135deg,#f59e0b,#ff6b00)',
+              color:'#000',fontWeight:800,fontSize:'15px',
+              opacity: (investing || !status?.connected || toInvest < 10) ? 0.5 : 1,
+              boxShadow:'0 0 30px rgba(245,158,11,0.3)'
+            }}>
+            {investing ? 'Invirtiendo...' : `₿ Invertir €${toInvest} ahora`}
+          </button>
+        </div>
+        {toInvest < 10 && (
+          <div style={{textAlign:'center',marginTop:'10px',color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>
+            Mínimo €10 para invertir (balance actual: €{fmt(balance)})
+          </div>
+        )}
+      </GlassCard>
+
+      {/* Info */}
+      <GlassCard className="p-6" glow="#8b5cf6">
+        <div style={{color:'#fff',fontWeight:700,marginBottom:'12px',fontSize:'15px'}}>📋 Cómo funciona</div>
+        {[
+          ['1', 'Tus ingresos (AdMob/YouTube) se acumulan en InverGrow'],
+          ['2', 'El bot coge el % que configures y compra crypto en Binance'],
+          ['3', 'La compra queda registrada automáticamente'],
+          ['4', 'Puedes activar inversión automática periódica (diaria/semanal)'],
+        ].map(([n,t])=>(
+          <div key={n} style={{display:'flex',gap:'12px',padding:'10px 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+            <div style={{
+              width:24,height:24,borderRadius:'50%',
+              background:'linear-gradient(135deg,#8b5cf6,#6366f1)',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:'11px',fontWeight:800,color:'#fff',flexShrink:0
+            }}>{n}</div>
+            <div style={{color:'rgba(255,255,255,0.6)',fontSize:'13px',lineHeight:'1.5'}}>{t}</div>
+          </div>
+        ))}
+      </GlassCard>
+    </div>
+  );
+}
+
+function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [state, setState] = useState<SystemState>(DEFAULT_STATE);
   const [toasts, setToasts] = useState<any[]>([]);
@@ -973,6 +1126,7 @@ export default function App() {
             transition={{duration:0.2}}>
             {activeTab==='dashboard' && <DashboardTab state={state}/>}
             {activeTab==='bot'       && <AIBotTab/>}
+            {activeTab==='binance'   && <BinanceBotPanel showToast={showToast} balance={state.balance}/>}
             {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast}/>}
             {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast}/>}
           </motion.div>
