@@ -1,1171 +1,1049 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   TrendingUp, Wallet, Activity, Users, ArrowUpRight, ArrowDownLeft,
-  RefreshCw, Sparkles, Youtube, DollarSign, Zap, BarChart3,
-  CheckCircle2, AlertCircle, ChevronRight, Settings, Bot,
-  Send, Brain, Target, PieChart, Flame, Star, Shield,
-  MessageCircle, X, Maximize2, LayoutDashboard, CreditCard,
-  Cpu, TrendingDown, Clock, Banknote, Package
+  RefreshCw, Shield, Sparkles, ShoppingCart, Youtube, DollarSign,
+  Zap, BarChart3, Clock, CheckCircle2, AlertCircle, ChevronRight,
+  Play, Eye, ThumbsUp, Settings, Repeat, Bell, Star, Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SystemState } from './types';
 
-// ── Utils ─────────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 const fmt  = (n: number) => n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtK = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}K` : `${n}`;
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY || '';
-const BACKEND = import.meta.env.VITE_BACKEND_URL || 'https://invergrow.vercel.app';
 
-// ── Datos reales del usuario ───────────────────────────────────────────────────
-const ADMOB_DATA = [
-  { app: 'Lanzarus',  revenue: 8.20,  ecpm: 1.40, impressions: 5840, color: '#00ff88', icon: '🚀' },
-  { app: 'r3dm/guia', revenue: 5.60,  ecpm: 0.90, impressions: 6222, color: '#00d4ff', icon: '🗺️' },
-  { app: 'Nexusia',   revenue: 3.10,  ecpm: 0.75, impressions: 4133, color: '#a855f7', icon: '🤖' },
+// YT defaults — se sobreescriben con datos reales desde /api/youtube
+const YT_DEFAULT = {
+  subscribers: 0, totalViews: 0, totalVideos: 0,
+  monthlyRevenue: 0, views30d: 0, watchMinutes30d: 0,
+  connected: false,
+  recentVideos: [] as { title: string; views: number; likes: number; date: string }[],
+};
+
+const ADMOB = [
+  { app: 'Lanzarus',  revenue: 8.20,  ecpm: 1.40, impressions: 5840, color: '#00ff88' },
+  { app: 'r3dm/guia', revenue: 5.60,  ecpm: 0.90, impressions: 6222, color: '#00d4ff' },
+  { app: 'Nexusia',   revenue: 3.10,  ecpm: 0.75, impressions: 4133, color: '#a855f7' },
 ];
-const YT_DATA = { subscribers: 1240, views: 48320, revenue: 42.80, videos: 23 };
-const AFFILIATE_DATA = { clicks: 342, conversions: 18, revenue: 12.40 };
-const TOTAL_REVENUE = ADMOB_DATA.reduce((a,b)=>a+b.revenue,0) + YT_DATA.revenue + AFFILIATE_DATA.revenue;
 
-// ── Fondo animado ─────────────────────────────────────────────────────────────
-function AnimatedBg() {
+const AFFILIATE_PRODUCTS = [
+  { name: 'Auriculares Sony WH-1000XM5', clicks: 84, sales: 3, commission: 4.20 },
+  { name: 'Meditación Mindfulness libro', clicks: 61, sales: 2, commission: 1.80 },
+  { name: 'Altavoz Bluetooth JBL Flip 6', clicks: 52, sales: 1, commission: 2.30 },
+  { name: 'Diffuser aromas zen',           clicks: 47, sales: 1, commission: 1.40 },
+];
+
+// ─── Animated Counter ─────────────────────────────────────────────────────────
+function Counter({ value }: { value: number }) {
+  const [disp, setDisp] = useState(0);
+  useEffect(() => {
+    const start = performance.now();
+    const dur = 1200;
+    const step = (ts: number) => {
+      const p = Math.min((ts - start) / dur, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      setDisp(value * e);
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [value]);
+  return <>{fmt(disp)}</>;
+}
+
+// ─── SVG Sparkline ────────────────────────────────────────────────────────────
+function Sparkline({ data, color = '#00ff88' }: { data: number[]; color?: string }) {
+  const max = Math.max(...data), min = Math.min(...data), range = max - min || 1;
+  const W = 400, H = 120;
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * W},${H - ((v - min) / range) * H * 0.8 - 10}`);
+  const d = `M ${pts.join(' L ')}`;
+  const fill = `${d} L ${W},${H} L 0,${H} Z`;
+  const id = `g${color.replace('#','')}`;
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-      <div style={{
-        position:'absolute', width:'600px', height:'600px',
-        borderRadius:'50%', top:'-100px', left:'-100px',
-        background:'radial-gradient(circle, rgba(0,255,136,0.06) 0%, transparent 70%)',
-        filter:'blur(40px)', animation:'float1 20s ease-in-out infinite'
-      }}/>
-      <div style={{
-        position:'absolute', width:'500px', height:'500px',
-        borderRadius:'50%', bottom:'-80px', right:'-80px',
-        background:'radial-gradient(circle, rgba(0,212,255,0.05) 0%, transparent 70%)',
-        filter:'blur(40px)', animation:'float2 25s ease-in-out infinite'
-      }}/>
-      <div style={{
-        position:'absolute', width:'400px', height:'400px',
-        borderRadius:'50%', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
-        background:'radial-gradient(circle, rgba(168,85,247,0.04) 0%, transparent 70%)',
-        filter:'blur(40px)', animation:'float3 18s ease-in-out infinite'
-      }}/>
-      {/* Grid lines */}
-      <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',opacity:0.03}}>
-        <defs>
-          <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-            <path d="M 60 0 L 0 0 0 60" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="0.5"/>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)"/>
-      </svg>
-      <style>{`
-        @keyframes float1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(30px,-20px) scale(1.05)} }
-        @keyframes float2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,30px) scale(0.95)} }
-        @keyframes float3 { 0%,100%{transform:translate(-50%,-50%) scale(1)} 50%{transform:translate(-50%,-50%) scale(1.1)} }
-        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 20px rgba(0,255,136,0.3)} 50%{box-shadow:0 0 40px rgba(0,255,136,0.6)} }
-        @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
-      `}</style>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+        <filter id={`f${id}`}><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      {[0.25,0.5,0.75].map(y => <line key={y} x1={0} y1={H*y} x2={W} y2={H*y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="5,4"/>)}
+      <path d={fill} fill={`url(#${id})`}/>
+      <path d={d} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" filter={`url(#f${id})`}/>
+      {data.map((_, i) => i % 2 === 0 && (
+        <circle key={i} cx={(i/(data.length-1))*W} cy={H-((data[i]-min)/range)*H*0.8-10} r="3.5" fill={color} stroke="#040608" strokeWidth="1.5" filter={`url(#f${id})`}/>
+      ))}
+    </svg>
+  );
+}
+
+// ─── Bar Chart ────────────────────────────────────────────────────────────────
+function BarChart({ data, color = '#00ff88', labels }: { data: number[]; color?: string; labels?: string[] }) {
+  const max = Math.max(...data);
+  return (
+    <div className="flex items-end gap-1.5 h-full w-full">
+      {data.map((v, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: `${(v / max) * 100}%` }}
+            transition={{ delay: i * 0.05, duration: 0.6, ease: [0.4,0,0.2,1] }}
+            className="w-full rounded-t-sm"
+            style={{ background: `linear-gradient(to top, ${color}40, ${color})`, minHeight: 3 }}
+          />
+          {labels && <span className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.6rem' }}>{labels[i]}</span>}
+        </div>
+      ))}
     </div>
   );
 }
 
-// ── Glass Card ────────────────────────────────────────────────────────────────
-function GlassCard({ children, className='', glow, onClick }: { children:React.ReactNode; className?:string; glow?:string; onClick?:()=>void }) {
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({ icon, label, value, sub, color, prefix = '€', suffix = '' }: any) {
+  const map: Record<string, { bg: string; border: string; glow: string }> = {
+    green:  { bg: 'rgba(0,255,136,0.06)',  border: 'rgba(0,255,136,0.15)',  glow: '0 0 40px rgba(0,255,136,0.08)' },
+    teal:   { bg: 'rgba(0,212,255,0.06)',  border: 'rgba(0,212,255,0.15)',  glow: '0 0 40px rgba(0,212,255,0.08)' },
+    purple: { bg: 'rgba(168,85,247,0.06)', border: 'rgba(168,85,247,0.15)', glow: '0 0 40px rgba(168,85,247,0.08)' },
+    orange: { bg: 'rgba(255,107,53,0.06)', border: 'rgba(255,107,53,0.15)', glow: '0 0 40px rgba(255,107,53,0.08)' },
+    gold:   { bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.15)', glow: '0 0 40px rgba(245,158,11,0.08)' },
+  };
+  const c = map[color] || map.green;
+  const textColor = { green:'#00ff88', teal:'#00d4ff', purple:'#a855f7', orange:'#ff6b35', gold:'#f59e0b' }[color] || '#00ff88';
   return (
     <motion.div
-      whileHover={{ scale: onClick ? 1.02 : 1, y: onClick ? -2 : 0 }}
-      onClick={onClick}
-      style={{
-        background: 'rgba(255,255,255,0.03)',
-        backdropFilter: 'blur(20px)',
-        border: `1px solid ${glow ? glow+'22' : 'rgba(255,255,255,0.08)'}`,
-        borderRadius: '20px',
-        boxShadow: glow ? `0 0 30px ${glow}11, inset 0 1px 0 rgba(255,255,255,0.05)` : 'inset 0 1px 0 rgba(255,255,255,0.05)',
-        cursor: onClick ? 'pointer' : 'default',
-      }}
-      className={className}
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3, boxShadow: c.glow }}
+      transition={{ duration: 0.35 }}
+      className="relative overflow-hidden rounded-2xl p-5"
+      style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${c.border}` }}
+    >
+      <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-3xl pointer-events-none" style={{ background: c.bg }} />
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>{label}</span>
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: c.bg, border: `1px solid ${c.border}` }}>
+            {React.cloneElement(icon, { className: 'w-3.5 h-3.5', style: { color: textColor } })}
+          </div>
+        </div>
+        <p className="text-3xl font-black tracking-tight" style={{ color: '#f1f5f9' }}>
+          {prefix}<Counter value={value} />{suffix}
+        </p>
+        <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{sub}</p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Section Header ───────────────────────────────────────────────────────────
+function SectionHeader({ icon, title, sub, badge, iconColor = '#00ff88', iconBg = 'rgba(0,255,136,0.1)' }: any) {
+  return (
+    <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: iconBg, border: `1px solid ${iconColor}25` }}>
+          {React.cloneElement(icon, { className: 'w-4 h-4', style: { color: iconColor } })}
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white">{title}</h3>
+          {sub && <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{sub}</p>}
+        </div>
+      </div>
+      {badge}
+    </div>
+  );
+}
+
+// ─── Glass Card ───────────────────────────────────────────────────────────────
+function Card({ children, className = '', delay = 0, style = {} }: any) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4 }}
+      className={`rounded-2xl p-6 relative overflow-hidden ${className}`}
+      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', ...style }}
     >
       {children}
     </motion.div>
   );
 }
 
-// ── Badge ─────────────────────────────────────────────────────────────────────
-function Badge({ children, color='#00ff88' }: { children:React.ReactNode; color?:string }) {
+// ─── Badge ────────────────────────────────────────────────────────────────────
+function Badge({ color = 'green', children }: any) {
+  const map: Record<string, { bg: string; text: string; border: string }> = {
+    green:  { bg: 'rgba(0,255,136,0.1)',  text: '#00ff88', border: 'rgba(0,255,136,0.25)' },
+    teal:   { bg: 'rgba(0,212,255,0.1)',  text: '#00d4ff', border: 'rgba(0,212,255,0.25)' },
+    amber:  { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b', border: 'rgba(245,158,11,0.25)' },
+    red:    { bg: 'rgba(239,68,68,0.1)',  text: '#ef4444', border: 'rgba(239,68,68,0.25)' },
+    purple: { bg: 'rgba(168,85,247,0.1)', text: '#a855f7', border: 'rgba(168,85,247,0.25)' },
+  };
+  const c = map[color] || map.green;
   return (
-    <span style={{
-      background: color+'15', color, border: `1px solid ${color}33`,
-      borderRadius: '8px', padding: '2px 10px', fontSize: '11px', fontWeight: 600,
-      fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.5px'
-    }}>
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}>
       {children}
     </span>
   );
 }
 
-// ── Metric Card ───────────────────────────────────────────────────────────────
-function MetricCard({ label, value, sub, color='#00ff88', icon, trend }: any) {
+// ─── Progress Bar ─────────────────────────────────────────────────────────────
+function ProgressBar({ value, max, color = '#00ff88' }: { value: number; max: number; color?: string }) {
+  const pct = Math.min((value / max) * 100, 100);
   return (
-    <GlassCard glow={color} className="p-6 relative overflow-hidden">
-      <div style={{position:'absolute',top:-20,right:-20,width:80,height:80,borderRadius:'50%',background:color+'08'}}/>
-      <div className="flex items-start justify-between mb-3">
-        <div style={{
-          background: color+'15', border: `1px solid ${color}30`,
-          borderRadius: '12px', padding: '10px', color
-        }}>
-          {icon}
-        </div>
-        {trend !== undefined && (
-          <div style={{
-            display:'flex', alignItems:'center', gap:'4px',
-            color: trend >= 0 ? '#00ff88' : '#ff4444',
-            fontSize: '13px', fontWeight: 600
-          }}>
-            {trend >= 0 ? <TrendingUp size={14}/> : <TrendingDown size={14}/>}
-            {Math.abs(trend)}%
-          </div>
-        )}
-      </div>
-      <div style={{
-        fontSize:'clamp(24px,3vw,36px)', fontWeight:800,
-        fontFamily:"'Space Grotesk', sans-serif", color:'#fff',
-        lineHeight:1.1, letterSpacing:'-1px'
-      }}>
-        {value}
-      </div>
-      <div style={{color:'rgba(255,255,255,0.4)', fontSize:'13px', marginTop:'4px', fontWeight:500}}>
-        {label}
-      </div>
-      {sub && (
-        <div style={{color, fontSize:'12px', marginTop:'6px', fontWeight:600, fontFamily:"'JetBrains Mono', monospace"}}>
-          {sub}
-        </div>
-      )}
-    </GlassCard>
+    <div className="w-full h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+      <motion.div
+        initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+        transition={{ duration: 0.8, ease: [0.4,0,0.2,1] }}
+        className="h-full rounded-full"
+        style={{ background: `linear-gradient(90deg, ${color}80, ${color})` }}
+      />
+    </div>
   );
 }
 
-// ── Sparkline ─────────────────────────────────────────────────────────────────
-function Sparkline({ data, color='#00ff88' }: { data:number[]; color?:string }) {
-  const max = Math.max(...data), min = Math.min(...data), range = max-min||1;
-  const W=300, H=80;
-  const pts = data.map((v,i)=>`${(i/(data.length-1))*W},${H-((v-min)/range)*H*0.8-8}`);
-  const d = `M ${pts.join(' L ')}`;
-  const fill = `${d} L ${W},${H} L 0,${H} Z`;
-  const id = `sg${color.replace('#','')}`;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{height:'80px'}} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
-          <stop offset="100%" stopColor={color} stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      <path d={fill} fill={`url(#${id})`}/>
-      <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx={(data.length-1)/(data.length-1)*W} cy={H-((data[data.length-1]-min)/range)*H*0.8-8} r="4" fill={color}/>
-    </svg>
-  );
-}
-
-// ── Dashboard Tab ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 1 — DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
 function DashboardTab({ state }: { state: SystemState }) {
-  const totalAdmob = ADMOB_DATA.reduce((a,b)=>a+b.revenue,0);
-  const sparkData = [12,18,15,22,19,28,24,32,29,38,35,42];
+  const totalAdmob = ADMOB.reduce((s, a) => s + a.revenue, 0);
+  const totalYT = 0; // YouTube revenue se muestra en YoutubeTab con datos reales
+  const totalAffiliate = AFFILIATE_PRODUCTS.reduce((s, p) => s + p.commission, 0);
+  const totalMonthly = totalAdmob + totalYT + totalAffiliate;
+  const reinvestPct = 0.3;
+  const reinvestAmt = totalMonthly * reinvestPct;
+  const withdrawAmt = totalMonthly * (1 - reinvestPct);
+
+  const monthLabels = ['Ene','Feb','Mar','Abr','May','Jun','Jul'];
+  const monthData   = [820, 1240, 980, 1580, 1320, 1890, 2140];
 
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:'24px'}}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
-      {/* KPI row */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'16px'}}>
-        <MetricCard label="Ingresos totales (mes)" value={`€${fmt(TOTAL_REVENUE)}`} color="#00ff88" icon={<DollarSign size={20}/>} trend={12.4}/>
-        <MetricCard label="Balance disponible" value={`€${fmt(state.balance)}`} color="#00d4ff" icon={<Wallet size={20}/>} trend={8.1}/>
-        <MetricCard label="AdMob acumulado" value={`€${fmt(totalAdmob)}`} color="#a855f7" icon={<Zap size={20}/>} trend={5.3}/>
-        <MetricCard label="Reinversión" value={`€${fmt(state.reinvestmentFund)}`} color="#f59e0b" icon={<RefreshCw size={20}/>}/>
+      {/* KPI Grid */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard icon={<Wallet />}       label="Saldo Total"        value={state.balance}          sub="↑ Actualizado en vivo"    color="green" />
+        <StatCard icon={<Repeat />}       label="Capital Invertido"  value={state.investedCapital}  sub="APR estimado 12.4%"       color="teal" />
+        <StatCard icon={<ArrowUpRight />} label="Total Retirado"     value={state.totalWithdrawals}  sub="Último hace 9 días"       color="orange" />
+        <StatCard icon={<Zap />}          label="Ingresos Este Mes"  value={totalMonthly}           sub="YouTube + AdMob + Afil."  color="gold" />
       </div>
 
-      {/* Gráfico principal + AdMob breakdown */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:'16px'}}>
-        <GlassCard className="p-6" glow="#00ff88">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginBottom:'4px'}}>Rendimiento 12 meses</div>
-              <div style={{color:'#fff',fontSize:'28px',fontWeight:800,fontFamily:"'Space Grotesk',sans-serif"}}>€{fmt(TOTAL_REVENUE * 12)}</div>
-            </div>
-            <Badge color="#00ff88">+32% vs año anterior</Badge>
-          </div>
-          <Sparkline data={sparkData} color="#00ff88"/>
-          <div style={{display:'flex',gap:'24px',marginTop:'12px'}}>
-            {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m,i)=>(
-              <div key={m} style={{flex:1,textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:'10px'}}>{m}</div>
-            ))}
-          </div>
-        </GlassCard>
+      {/* Chart + Income Sources */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        <GlassCard className="p-6" glow="#a855f7">
-          <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginBottom:'20px'}}>AdMob por app</div>
-          <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
-            {ADMOB_DATA.map(app=>(
-              <div key={app.app}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px',alignItems:'center'}}>
-                  <span style={{color:'#fff',fontWeight:600,fontSize:'14px'}}>{app.icon} {app.app}</span>
-                  <span style={{color:app.color,fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>€{fmt(app.revenue)}</span>
-                </div>
-                <div style={{background:'rgba(255,255,255,0.06)',borderRadius:'6px',height:'6px',overflow:'hidden'}}>
-                  <motion.div
-                    initial={{width:0}}
-                    animate={{width:`${(app.revenue/ADMOB_DATA[0].revenue)*100}%`}}
-                    transition={{duration:1,ease:'easeOut'}}
-                    style={{height:'100%',borderRadius:'6px',background:`linear-gradient(90deg,${app.color},${app.color}88)`}}
-                  />
-                </div>
-                <div style={{color:'rgba(255,255,255,0.3)',fontSize:'11px',marginTop:'4px',fontFamily:"'JetBrains Mono',monospace"}}>
-                  eCPM: €{app.ecpm} · {fmtK(app.impressions)} imp.
-                </div>
-              </div>
-            ))}
+        {/* Monthly Chart */}
+        <Card className="lg:col-span-7" delay={0.05}>
+          <SectionHeader icon={<BarChart3 />} title="Evolución de Ingresos" sub="2026 · €/mes" badge={<Badge color="green"><TrendingUp className="w-3 h-3"/>+28%</Badge>} />
+          <div className="h-36">
+            <BarChart data={monthData} color="#00ff88" labels={monthLabels} />
           </div>
-        </GlassCard>
-      </div>
-
-      {/* YouTube + Afiliados */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
-        <GlassCard className="p-6" glow="#ff0000">
-          <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'20px'}}>
-            <div style={{background:'#ff000020',border:'1px solid #ff000040',borderRadius:'12px',padding:'10px',color:'#ff4444'}}>
-              <Youtube size={22}/>
-            </div>
-            <div>
-              <div style={{color:'#fff',fontWeight:700,fontSize:'16px'}}>Canal Equilibrio</div>
-              <div style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>@Equilibrio-c2k</div>
-            </div>
-            <Badge color="#ff4444">LIVE</Badge>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+          <div className="grid grid-cols-3 gap-3 mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             {[
-              {label:'Ingresos/mes', value:`€${fmt(YT_DATA.revenue)}`, color:'#ff4444'},
-              {label:'Suscriptores', value:fmtK(YT_DATA.subscribers), color:'#fff'},
-              {label:'Visualizaciones', value:fmtK(YT_DATA.views), color:'#fff'},
-              {label:'Vídeos', value:`${YT_DATA.videos}`, color:'#fff'},
-            ].map(item=>(
-              <div key={item.label} style={{background:'rgba(255,255,255,0.04)',borderRadius:'12px',padding:'12px'}}>
-                <div style={{color:item.color,fontWeight:700,fontSize:'18px',fontFamily:"'Space Grotesk',sans-serif"}}>{item.value}</div>
-                <div style={{color:'rgba(255,255,255,0.3)',fontSize:'11px',marginTop:'2px'}}>{item.label}</div>
+              { label: 'Mejor mes', value: '€2.140', color: '#00ff88' },
+              { label: 'Media mensual', value: '€1.424', color: '#00d4ff' },
+              { label: 'Proyección anual', value: '€25.6K', color: '#a855f7' },
+            ].map((s, i) => (
+              <div key={i} className="text-center p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <p className="text-base font-black" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
               </div>
             ))}
           </div>
-        </GlassCard>
+        </Card>
 
-        <GlassCard className="p-6" glow="#f59e0b">
-          <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'20px'}}>
-            <div style={{background:'#f59e0b20',border:'1px solid #f59e0b40',borderRadius:'12px',padding:'10px',color:'#f59e0b'}}>
-              <Package size={22}/>
-            </div>
-            <div>
-              <div style={{color:'#fff',fontWeight:700,fontSize:'16px'}}>Amazon Afiliados</div>
-              <div style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>Tracking: r3dm01-21</div>
-            </div>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'12px'}}>
+        {/* Income Breakdown */}
+        <Card className="lg:col-span-5" delay={0.1}>
+          <SectionHeader icon={<Activity />} title="Fuentes de Ingresos" sub="Este mes" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
+          <div className="space-y-4">
             {[
-              {label:'Ingresos', value:`€${fmt(AFFILIATE_DATA.revenue)}`, color:'#f59e0b'},
-              {label:'Clicks', value:`${AFFILIATE_DATA.clicks}`, color:'#fff'},
-              {label:'Ventas', value:`${AFFILIATE_DATA.conversions}`, color:'#fff'},
-            ].map(item=>(
-              <div key={item.label} style={{background:'rgba(255,255,255,0.04)',borderRadius:'12px',padding:'12px',textAlign:'center'}}>
-                <div style={{color:item.color,fontWeight:700,fontSize:'20px',fontFamily:"'Space Grotesk',sans-serif"}}>{item.value}</div>
-                <div style={{color:'rgba(255,255,255,0.3)',fontSize:'11px',marginTop:'2px'}}>{item.label}</div>
+              { label: 'YouTube Equilibrio', value: totalYT,       max: totalMonthly, color: '#ef4444', icon: <Youtube className="w-3.5 h-3.5" /> },
+              { label: 'AdMob (3 apps)',     value: totalAdmob,    max: totalMonthly, color: '#00ff88', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+              { label: 'Afiliados Amazon',   value: totalAffiliate,max: totalMonthly, color: '#f59e0b', icon: <ShoppingCart className="w-3.5 h-3.5" /> },
+            ].map((s, i) => (
+              <div key={i}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2" style={{ color: s.color }}>
+                    {s.icon}
+                    <span className="text-xs font-semibold text-white">{s.label}</span>
+                  </div>
+                  <span className="text-xs font-black font-mono" style={{ color: s.color }}>€{fmt(s.value)}</span>
+                </div>
+                <ProgressBar value={s.value} max={totalMonthly} color={s.color} />
               </div>
             ))}
           </div>
-          <div style={{marginTop:'16px',background:'rgba(245,158,11,0.08)',borderRadius:'12px',padding:'12px'}}>
-            <div style={{color:'#f59e0b',fontSize:'12px',fontWeight:600}}>Conversión: {((AFFILIATE_DATA.conversions/AFFILIATE_DATA.clicks)*100).toFixed(1)}%</div>
-            <div style={{color:'rgba(255,255,255,0.3)',fontSize:'11px',marginTop:'2px'}}>Ratio por encima de media del sector (4.2%)</div>
+
+          {/* Reinversion summary */}
+          <div className="mt-5 p-4 rounded-xl space-y-2" style={{ background: 'rgba(0,255,136,0.04)', border: '1px solid rgba(0,255,136,0.1)' }}>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>🔄 Reinversión (30%)</span>
+              <span className="font-bold text-green-400">€{fmt(reinvestAmt)}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>💸 Disponible para retirar</span>
+              <span className="font-bold text-white">€{fmt(withdrawAmt)}</span>
+            </div>
           </div>
-        </GlassCard>
+        </Card>
       </div>
 
-      {/* Transacciones recientes */}
-      <GlassCard className="p-6">
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'20px'}}>
-          <div style={{color:'#fff',fontWeight:700,fontSize:'16px'}}>Transacciones recientes</div>
-          <Badge color="#00d4ff">Ver todas</Badge>
+      {/* Status Strip */}
+      <Card delay={0.15}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.15)' }}>
+              <Sparkles className="w-6 h-6" style={{ color: '#00ff88' }} />
+            </div>
+            <div>
+              <h3 className="font-bold text-white">Motor de Ingresos Pasivos</h3>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>YouTube · AdMob · Afiliados · Reinversión automática 24/7</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge color="green"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"/>ACTIVO</Badge>
+            <p className="text-2xl font-black" style={{ color: '#00ff88' }}>€{fmt(state.netGains)}<span className="text-xs font-normal text-white/40 ml-1">hoy</span></p>
+          </div>
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
-          {(state.transactions||[]).slice(0,5).map((tx,i)=>(
-            <motion.div key={tx.id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} transition={{delay:i*0.05}}
-              style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',
-                background:'rgba(255,255,255,0.03)',borderRadius:'12px',border:'1px solid rgba(255,255,255,0.06)'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                <div style={{
-                  width:36,height:36,borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',
-                  background: tx.type.includes('WITHDRAW') ? 'rgba(255,68,68,0.15)' : 'rgba(0,255,136,0.15)',
-                  color: tx.type.includes('WITHDRAW') ? '#ff4444' : '#00ff88'
-                }}>
-                  {tx.type.includes('WITHDRAW') ? <ArrowDownLeft size={16}/> : <ArrowUpRight size={16}/>}
-                </div>
-                <div>
-                  <div style={{color:'#fff',fontWeight:600,fontSize:'14px'}}>{tx.description}</div>
-                  <div style={{color:'rgba(255,255,255,0.3)',fontSize:'12px',fontFamily:"'JetBrains Mono',monospace"}}>{tx.date}</div>
-                </div>
-              </div>
-              <div style={{textAlign:'right'}}>
-                <div style={{color: tx.type.includes('WITHDRAW')?'#ff4444':'#00ff88',fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>
-                  {tx.type.includes('WITHDRAW') ? '-' : '+'}€{fmt(tx.amount)}
-                </div>
-                <Badge color={tx.status==='COMPLETED'?'#00ff88':tx.status==='PENDING'?'#f59e0b':'#ff4444'}>{tx.status}</Badge>
-              </div>
-            </motion.div>
-          ))}
-          {(!state.transactions||state.transactions.length===0) && (
-            <div style={{textAlign:'center',padding:'40px',color:'rgba(255,255,255,0.2)'}}>Sin transacciones aún</div>
-          )}
-        </div>
-      </GlassCard>
-    </div>
+      </Card>
+    </motion.div>
   );
 }
 
-// ── AI Investment Bot ─────────────────────────────────────────────────────────
-interface Message { role:'user'|'ai'; text:string; ts:string; }
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 2 — YOUTUBE + BOT
+// ══════════════════════════════════════════════════════════════════════════════
+function YoutubeTab() {
+  const [botActive, setBotActive] = useState(false);
+  const [ytData, setYtData] = useState(YT_DEFAULT);
+  const [loading, setLoading] = useState(true);
 
-function AIBotTab() {
-  const [messages, setMessages] = useState<Message[]>([{
-    role:'ai',
-    text:`¡Hola Joan! 👋 Soy tu **Asesor AI de Inversiones**. Analizo tus ingresos reales en tiempo real:\n\n💰 **Total mes:** €${fmt(TOTAL_REVENUE)}\n📱 **AdMob:** €${fmt(ADMOB_DATA.reduce((a,b)=>a+b.revenue,0))}\n▶️ **YouTube:** €${fmt(YT_DATA.revenue)}\n🛒 **Afiliados:** €${fmt(AFFILIATE_DATA.revenue)}\n\n¿Qué quieres saber? Puedo darte estrategias de reinversión, análisis de tus apps, previsiones de ingresos o consejos para escalar.`,
-    ts: new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})
-  }]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); },[messages]);
-
-  const SYSTEM_PROMPT = `Eres un asesor financiero AI experto en inversión, especializado en monetización digital y apps móviles. 
-Trabajas con Joan (aka R3DMOON/J.Quasar), músico independiente español con ingresos digitales.
-
-DATOS REALES DEL USUARIO (actualizados):
-- AdMob Lanzarus: €8.20/mes, eCPM €1.40, 5840 impresiones
-- AdMob r3dm/guia: €5.60/mes, eCPM €0.90, 6222 impresiones  
-- AdMob Nexusia: €3.10/mes, eCPM €0.75, 4133 impresiones
-- YouTube Equilibrio: €42.80/mes, 1240 suscriptores, 48320 views
-- Amazon Afiliados (r3dm01-21): €12.40/mes, 342 clicks, 18 ventas
-- TOTAL MENSUAL: €${fmt(TOTAL_REVENUE)}
-- TOTAL ANUAL ESTIMADO: €${fmt(TOTAL_REVENUE * 12)}
-
-Responde siempre en español, de forma directa y útil. Da consejos concretos, datos reales, estrategias accionables. 
-Usa emojis con moderación. Sé conciso pero completo. Cuando calcules proyecciones usa los datos reales de arriba.`;
-
-  async function sendMessage() {
-    const text = input.trim();
-    if (!text || loading) return;
-    setInput('');
-
-    const userMsg: Message = { role:'user', text, ts: new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}) };
-    setMessages(prev=>[...prev,userMsg]);
-    setLoading(true);
-
-    try {
-      const history = messages.slice(-8).map(m=>({
-        role: m.role==='user' ? 'user' : 'model',
-        parts: [{ text: m.text }]
-      }));
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [...history, { role:'user', parts:[{text}] }],
-          generationConfig: { temperature: 0.8, maxOutputTokens: 1024 }
-        })
-      });
-
-      const data = await res.json();
-      const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Error al obtener respuesta.';
-      setMessages(prev=>[...prev,{ role:'ai', text:aiText, ts: new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}) }]);
-    } catch(e) {
-      setMessages(prev=>[...prev,{ role:'ai', text:'❌ Error de conexión con Gemini. Verifica tu API key en las variables de entorno.', ts:'' }]);
-    }
-    setLoading(false);
-  }
-
-  function renderText(text: string) {
-    // Markdown básico
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/\n/g, '<br/>');
-  }
-
-  const QUICK = [
-    '¿Dónde reinvertir mis ingresos?',
-    'Previsión a 6 meses',
-    '¿Cómo subir el eCPM?',
-    'Estrategia para escalar',
-    'Apps más rentables',
-    'Diversificar ingresos',
-  ];
+  useEffect(() => {
+    fetch('/api/youtube', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.connected && d.data) {
+          setYtData({
+            connected: true,
+            subscribers:      d.data.subscribers     || 0,
+            totalViews:       d.data.total_views      || 0,
+            totalVideos:      d.data.total_videos     || 0,
+            monthlyRevenue:   d.data.revenue_30d      || 0,
+            views30d:         d.data.views_30d        || 0,
+            watchMinutes30d:  d.data.watch_minutes_30d || 0,
+            recentVideos:     (d.data.recent_videos || []).map((v: any) => ({
+              title: v.title || 'Sin título',
+              views: v.views || 0,
+              likes: v.likes || 0,
+              date:  v.published_at
+                ? new Date(v.published_at).toLocaleDateString('es-ES', { day:'numeric', month:'short' })
+                : '—',
+            })),
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 180px)',gap:'16px'}}>
-      
-      {/* Header stats del bot */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
-        {[
-          {label:'Ingresos/mes',value:`€${fmt(TOTAL_REVENUE)}`,color:'#00ff88',icon:<DollarSign size={16}/>},
-          {label:'Proyección anual',value:`€${fmt(TOTAL_REVENUE*12)}`,color:'#00d4ff',icon:<TrendingUp size={16}/>},
-          {label:'Apps activas',value:'3',color:'#a855f7',icon:<Zap size={16}/>},
-          {label:'Fuentes de ingreso',value:'3',color:'#f59e0b',icon:<Target size={16}/>},
-        ].map(s=>(
-          <GlassCard key={s.label} className="p-4" glow={s.color}>
-            <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'6px',color:s.color}}>{s.icon}</div>
-            <div style={{color:'#fff',fontWeight:700,fontSize:'18px',fontFamily:"'Space Grotesk',sans-serif"}}>{s.value}</div>
-            <div style={{color:'rgba(255,255,255,0.3)',fontSize:'11px'}}>{s.label}</div>
-          </GlassCard>
-        ))}
-      </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
-      {/* Chat container */}
-      <GlassCard className="flex-1 flex flex-col overflow-hidden" style={{minHeight:0}}>
-        {/* Chat header */}
-        <div style={{
-          padding:'16px 20px',
-          borderBottom:'1px solid rgba(255,255,255,0.06)',
-          display:'flex',alignItems:'center',gap:'12px'
-        }}>
-          <div style={{
-            width:42,height:42,borderRadius:'50%',
-            background:'linear-gradient(135deg,#00ff88,#00d4ff)',
-            display:'flex',alignItems:'center',justifyContent:'center',
-            boxShadow:'0 0 20px rgba(0,255,136,0.4)'
-          }}>
-            <Brain size={22} color="#000"/>
-          </div>
-          <div>
-            <div style={{color:'#fff',fontWeight:700,fontSize:'15px'}}>Asesor AI de Inversiones</div>
-            <div style={{color:'#00ff88',fontSize:'12px',fontFamily:"'JetBrains Mono',monospace",display:'flex',alignItems:'center',gap:'6px'}}>
-              <span style={{width:6,height:6,borderRadius:'50%',background:'#00ff88',display:'inline-block',animation:'pulse-glow 2s infinite'}}/>
-              Online · Gemini 2.0 Flash
+      {/* Channel Hero */}
+      <Card>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 20% 50%, rgba(239,68,68,0.05), transparent 60%)' }} />
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="flex items-center gap-5">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <Youtube className="w-8 h-8 text-red-500" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-white">@Equilibrio-c2k</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>equilibrioapp3@gmail.com · Canal evergreen de relajación</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Badge color="red"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block"/>Live</Badge>
+                {ytData.connected
+                  ? <Badge color="green">✅ API Conectada</Badge>
+                  : <Badge color="amber">Conectando…</Badge>
+                }
+              </div>
             </div>
           </div>
-          <div style={{marginLeft:'auto',display:'flex',gap:'8px'}}>
-            <Badge color="#00ff88">Datos reales</Badge>
-            <Badge color="#00d4ff">IA activa</Badge>
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div style={{flex:1,overflowY:'auto',padding:'20px',display:'flex',flexDirection:'column',gap:'16px'}}>
-          <AnimatePresence>
-            {messages.map((msg,i)=>(
-              <motion.div key={i}
-                initial={{opacity:0,y:10,scale:0.98}}
-                animate={{opacity:1,y:0,scale:1}}
-                style={{display:'flex',justifyContent:msg.role==='user'?'flex-end':'flex-start'}}
-              >
-                {msg.role==='ai' && (
-                  <div style={{
-                    width:32,height:32,borderRadius:'50%',flexShrink:0,marginRight:'10px',
-                    background:'linear-gradient(135deg,#00ff8833,#00d4ff33)',
-                    border:'1px solid #00ff8844',
-                    display:'flex',alignItems:'center',justifyContent:'center',color:'#00ff88'
-                  }}>
-                    <Bot size={16}/>
-                  </div>
-                )}
-                <div style={{maxWidth:'75%'}}>
-                  <div style={{
-                    padding:'14px 18px',
-                    borderRadius: msg.role==='user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                    background: msg.role==='user'
-                      ? 'linear-gradient(135deg,#00ff8820,#00d4ff20)'
-                      : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${msg.role==='user' ? '#00ff8840' : 'rgba(255,255,255,0.08)'}`,
-                    color:'rgba(255,255,255,0.9)',
-                    fontSize:'14px',
-                    lineHeight:1.6,
-                    fontFamily:"'Inter',sans-serif"
-                  }} dangerouslySetInnerHTML={{__html:renderText(msg.text)}}/>
-                  <div style={{color:'rgba(255,255,255,0.2)',fontSize:'11px',marginTop:'4px',
-                    textAlign:msg.role==='user'?'right':'left',
-                    fontFamily:"'JetBrains Mono',monospace"}}>
-                    {msg.ts}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {loading && (
-            <motion.div initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',gap:'10px',alignItems:'center'}}>
-              <div style={{
-                width:32,height:32,borderRadius:'50%',
-                background:'linear-gradient(135deg,#00ff8833,#00d4ff33)',
-                border:'1px solid #00ff8844',
-                display:'flex',alignItems:'center',justifyContent:'center',color:'#00ff88'
-              }}>
-                <Bot size={16}/>
-              </div>
-              <div style={{
-                padding:'14px 18px',background:'rgba(255,255,255,0.04)',
-                borderRadius:'18px 18px 18px 4px',border:'1px solid rgba(255,255,255,0.08)',
-                display:'flex',gap:'6px',alignItems:'center'
-              }}>
-                {[0,1,2].map(i=>(
-                  <motion.div key={i} animate={{y:[0,-6,0]}} transition={{repeat:Infinity,duration:0.8,delay:i*0.15}}
-                    style={{width:6,height:6,borderRadius:'50%',background:'#00ff88'}}/>
-                ))}
-              </div>
-            </motion.div>
-          )}
-          <div ref={bottomRef}/>
-        </div>
-
-        {/* Quick questions */}
-        <div style={{padding:'0 20px 12px',display:'flex',gap:'8px',flexWrap:'wrap'}}>
-          {QUICK.map(q=>(
-            <button key={q} onClick={()=>{setInput(q);inputRef.current?.focus();}}
-              style={{
-                background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.2)',
-                borderRadius:'20px',padding:'6px 14px',color:'rgba(255,255,255,0.6)',
-                fontSize:'12px',cursor:'pointer',transition:'all 0.2s',fontFamily:"'Inter',sans-serif"
-              }}
-              onMouseEnter={e=>{(e.target as HTMLElement).style.background='rgba(0,255,136,0.15)';(e.target as HTMLElement).style.color='#fff';}}
-              onMouseLeave={e=>{(e.target as HTMLElement).style.background='rgba(0,255,136,0.06)';(e.target as HTMLElement).style.color='rgba(255,255,255,0.6)';}}
-            >{q}</button>
-          ))}
-        </div>
-
-        {/* Input */}
-        <div style={{
-          padding:'16px 20px',
-          borderTop:'1px solid rgba(255,255,255,0.06)',
-          display:'flex',gap:'12px',alignItems:'flex-end'
-        }}>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={e=>setInput(e.target.value)}
-            onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}}
-            placeholder="Pregunta sobre inversión, estrategias, previsiones..."
-            rows={1}
-            style={{
-              flex:1,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',
-              borderRadius:'14px',padding:'12px 16px',color:'#fff',fontSize:'14px',
-              resize:'none',outline:'none',fontFamily:"'Inter',sans-serif",lineHeight:1.5,
-              maxHeight:'120px',overflowY:'auto',
-              transition:'border-color 0.2s'
-            }}
-            onFocus={e=>{e.target.style.borderColor='rgba(0,255,136,0.4)';}}
-            onBlur={e=>{e.target.style.borderColor='rgba(255,255,255,0.1)';}}
-          />
-          <button onClick={sendMessage} disabled={loading||!input.trim()}
-            style={{
-              width:46,height:46,borderRadius:'14px',border:'none',cursor:'pointer',
-              background: input.trim()&&!loading ? 'linear-gradient(135deg,#00ff88,#00d4ff)' : 'rgba(255,255,255,0.06)',
-              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
-              transition:'all 0.2s',
-              color: input.trim()&&!loading ? '#000' : 'rgba(255,255,255,0.2)',
-            }}>
-            <Send size={18}/>
-          </button>
-        </div>
-      </GlassCard>
-    </div>
-  );
-}
-
-// ── Withdraw Tab ──────────────────────────────────────────────────────────────
-function WithdrawTab({ state, onWithdraw, showToast }: any) {
-  const [amount, setAmount] = useState('');
-  const [iban, setIban] = useState(localStorage.getItem('invergrow_iban') || '');
-  const [ibanOwner, setIbanOwner] = useState(localStorage.getItem('invergrow_iban_owner') || '');
-  const [method, setMethod] = useState<'paypal'|'iban'>(localStorage.getItem('invergrow_method') as any || 'paypal');
-  const [loading, setLoading] = useState(false);
-  const [reinvestPct, setReinvestPct] = useState(30);
-
-  function savePrefs() {
-    localStorage.setItem('invergrow_iban', iban);
-    localStorage.setItem('invergrow_iban_owner', ibanOwner);
-    localStorage.setItem('invergrow_method', method);
-  }
-
-  async function handleWithdraw() {
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0 || amt > state.balance) { showToast('error', 'Cantidad inválida'); return; }
-    if (method === 'iban' && !iban) { showToast('error', 'Introduce tu IBAN'); return; }
-    savePrefs();
-    setLoading(true);
-    await onWithdraw(amt, method, iban, ibanOwner);
-    setAmount('');
-    setLoading(false);
-  }
-
-  const toReceive = parseFloat(amount||'0') * (1 - reinvestPct/100);
-  const toReinvest = parseFloat(amount||'0') * reinvestPct/100;
-
-  return (
-    <div style={{display:'flex',flexDirection:'column',gap:'24px',maxWidth:'700px',margin:'0 auto'}}>
-      <GlassCard className="p-8" glow="#00ff88">
-        {/* Balance */}
-        <div style={{textAlign:'center',marginBottom:'32px'}}>
-          <div style={{width:72,height:72,borderRadius:'50%',background:'linear-gradient(135deg,#00ff88,#00d4ff)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',boxShadow:'0 0 40px rgba(0,255,136,0.3)'}}>
-            <Banknote size={32} color="#000"/>
-          </div>
-          <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginBottom:'8px'}}>Balance disponible</div>
-          <div style={{color:'#00ff88',fontSize:'48px',fontWeight:800,fontFamily:"'Space Grotesk',sans-serif",letterSpacing:'-2px'}}>
-            €{fmt(state.balance)}
-          </div>
-        </div>
-
-        {/* Método */}
-        <div style={{display:'flex',gap:'12px',marginBottom:'20px'}}>
-          {(['paypal','iban'] as const).map(m => (
-            <button key={m} onClick={()=>setMethod(m)} style={{
-              flex:1,padding:'12px',borderRadius:'12px',border:'none',cursor:'pointer',fontWeight:700,fontSize:'13px',
-              background: method===m ? 'linear-gradient(135deg,#00ff88,#00d4ff)' : 'rgba(255,255,255,0.05)',
-              color: method===m ? '#000' : 'rgba(255,255,255,0.5)',
-              transition:'all 0.2s'
-            }}>
-              {m==='paypal' ? '🅿️ PayPal' : '🏦 IBAN'}
+          <div className="flex flex-col gap-2 items-end">
+            <button onClick={() => setBotActive(v => !v)}
+              className="px-5 py-2.5 rounded-xl font-bold text-sm transition-all"
+              style={botActive
+                ? { background: 'rgba(0,255,136,0.15)', border: '1px solid rgba(0,255,136,0.3)', color: '#00ff88' }
+                : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>
+              {botActive ? '⏸ Pausar Bot' : '▶ Activar Bot'}
             </button>
-          ))}
-        </div>
-
-        {/* Campos IBAN */}
-        {method === 'iban' && (
-          <div style={{marginBottom:'20px',display:'flex',flexDirection:'column',gap:'12px'}}>
-            <div>
-              <div style={{color:'rgba(255,255,255,0.4)',fontSize:'12px',marginBottom:'6px'}}>IBAN</div>
-              <input value={iban} onChange={e=>setIban(e.target.value.toUpperCase())}
-                placeholder="ES00 0000 0000 0000 0000 0000"
-                style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'12px',padding:'12px 16px',color:'#fff',fontSize:'14px',fontFamily:"'JetBrains Mono',monospace",outline:'none',boxSizing:'border-box'}}
-              />
-            </div>
-            <div>
-              <div style={{color:'rgba(255,255,255,0.4)',fontSize:'12px',marginBottom:'6px'}}>Titular</div>
-              <input value={ibanOwner} onChange={e=>setIbanOwner(e.target.value)}
-                placeholder="Nombre Apellido"
-                style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'12px',padding:'12px 16px',color:'#fff',fontSize:'14px',outline:'none',boxSizing:'border-box'}}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Cantidad */}
-        <div style={{marginBottom:'20px'}}>
-          <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginBottom:'8px'}}>Cantidad a retirar</div>
-          <div style={{position:'relative'}}>
-            <span style={{position:'absolute',left:'16px',top:'50%',transform:'translateY(-50%)',color:'#00ff88',fontWeight:700,fontSize:'18px'}}>€</span>
-            <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"
-              style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'14px',padding:'16px 16px 16px 36px',color:'#fff',fontSize:'24px',fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",outline:'none',boxSizing:'border-box'}}
-            />
-          </div>
-        </div>
-
-        {/* Reinversión */}
-        <div style={{marginBottom:'24px'}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:'8px'}}>
-            <span style={{color:'rgba(255,255,255,0.4)',fontSize:'13px'}}>Reinvertir automáticamente</span>
-            <span style={{color:'#00ff88',fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>{reinvestPct}%</span>
-          </div>
-          <input type="range" min={0} max={100} value={reinvestPct} onChange={e=>setReinvestPct(+e.target.value)}
-            style={{width:'100%',accentColor:'#00ff88',height:'6px'}}/>
-          <div style={{display:'flex',justifyContent:'space-between',marginTop:'6px'}}>
-            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>Recibes: <strong style={{color:'#fff'}}>€{fmt(toReceive)}</strong></span>
-            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>Reinviertes: <strong style={{color:'#f59e0b'}}>€{fmt(toReinvest)}</strong></span>
-          </div>
-        </div>
-
-        {/* Botón */}
-        <button onClick={handleWithdraw} disabled={loading||!amount}
-          style={{width:'100%',padding:'16px',borderRadius:'14px',border:'none',cursor:'pointer',background:'linear-gradient(135deg,#00ff88,#00d4ff)',color:'#000',fontWeight:800,fontSize:'16px',fontFamily:"'Space Grotesk',sans-serif",opacity:loading||!amount?0.5:1,boxShadow:'0 0 30px rgba(0,255,136,0.3)',transition:'all 0.2s'}}>
-          {loading ? 'Procesando...' : method==='iban' ? '🏦 Solicitar retiro por IBAN' : '💸 Solicitar retiro a PayPal'}
-        </button>
-        <div style={{textAlign:'center',marginTop:'12px',color:'rgba(255,255,255,0.2)',fontSize:'12px',fontFamily:"'JetBrains Mono',monospace"}}>
-          {method==='iban' ? (iban || 'Sin IBAN guardado') : 'joanlazaro83@gmail.com'}
-        </div>
-      </GlassCard>
-
-      <GlassCard className="p-6" glow="#f59e0b">
-        <div style={{color:'#fff',fontWeight:700,marginBottom:'16px',display:'flex',alignItems:'center',gap:'8px'}}>
-          <Activity size={18} color="#f59e0b"/>
-          Historial de retiros
-        </div>
-        {(state.transactions||[]).filter((t:any)=>t.type.includes('WITHDRAW')).slice(0,5).map((tx:any,i:number)=>(
-          <div key={tx.id} style={{display:'flex',justifyContent:'space-between',padding:'12px 0',
-            borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-            <div>
-              <div style={{color:'#fff',fontSize:'14px',fontWeight:600}}>{tx.description}</div>
-              <div style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>{tx.date}</div>
-            </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{color:'#ff4444',fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>-€{fmt(tx.amount)}</div>
-              <Badge color={tx.status==='COMPLETED'?'#00ff88':'#f59e0b'}>{tx.status}</Badge>
-            </div>
-          </div>
-        ))}
-      </GlassCard>
-    </div>
-  );
-}
-
-// ── Admin Tab ─────────────────────────────────────────────────────────────────
-function AdminTab({ state, onAddCollaborator, showToast }: any) {
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('');
-  const [wage, setWage] = useState('');
-
-  function addCollaborator() {
-    if (!name || !wage) return;
-    onAddCollaborator({ name, role, wage: parseFloat(wage) });
-    setName(''); setRole(''); setWage('');
-    showToast('success','Colaborador añadido');
-  }
-
-  return (
-    <div style={{display:'flex',flexDirection:'column',gap:'24px'}}>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
-        <GlassCard className="p-6" glow="#00d4ff">
-          <div style={{color:'#fff',fontWeight:700,fontSize:'16px',marginBottom:'20px',display:'flex',alignItems:'center',gap:'8px'}}>
-            <Users size={18} color="#00d4ff"/>Colaboradores
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-            {(state.collaborators||[]).map((c:any)=>(
-              <div key={c.id} style={{
-                display:'flex',alignItems:'center',justifyContent:'space-between',
-                padding:'12px',background:'rgba(255,255,255,0.03)',borderRadius:'12px',
-                border:'1px solid rgba(255,255,255,0.06)'
-              }}>
-                <div>
-                  <div style={{color:'#fff',fontWeight:600,fontSize:'14px'}}>{c.name}</div>
-                  <div style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>{c.role}</div>
-                </div>
-                <div style={{color:'#00d4ff',fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>€{fmt(c.wage)}/mes</div>
-              </div>
-            ))}
-            {(!state.collaborators||state.collaborators.length===0) && (
-              <div style={{textAlign:'center',padding:'30px',color:'rgba(255,255,255,0.2)'}}>Sin colaboradores</div>
+            {!ytData.connected && !loading && (
+              <a href="/api/youtube-auth-start"
+                className="px-4 py-2 rounded-xl font-bold text-xs transition-all text-center"
+                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }}>
+                🔑 Re-autorizar YouTube
+              </a>
             )}
           </div>
-        </GlassCard>
+        </div>
+      </Card>
 
-        <GlassCard className="p-6" glow="#a855f7">
-          <div style={{color:'#fff',fontWeight:700,fontSize:'16px',marginBottom:'20px'}}>➕ Añadir colaborador</div>
-          {[
-            {label:'Nombre',value:name,set:setName,placeholder:'Nombre completo'},
-            {label:'Rol',value:role,set:setRole,placeholder:'Diseñador, Dev...'},
-            {label:'Salario/mes (€)',value:wage,set:setWage,placeholder:'0.00',type:'number'},
-          ].map(f=>(
-            <div key={f.label} style={{marginBottom:'12px'}}>
-              <div style={{color:'rgba(255,255,255,0.4)',fontSize:'12px',marginBottom:'6px'}}>{f.label}</div>
-              <input value={f.value} onChange={e=>f.set(e.target.value)} placeholder={f.placeholder} type={f.type||'text'}
-                style={{
-                  width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',
-                  borderRadius:'10px',padding:'10px 14px',color:'#fff',fontSize:'14px',outline:'none',
-                  boxSizing:'border-box',fontFamily:"'Inter',sans-serif"
-                }}/>
-            </div>
-          ))}
-          <button onClick={addCollaborator}
-            style={{
-              width:'100%',padding:'12px',borderRadius:'10px',border:'none',cursor:'pointer',
-              background:'linear-gradient(135deg,#a855f7,#7c3aed)',color:'#fff',fontWeight:700
-            }}>
-            Añadir
-          </button>
-        </GlassCard>
+      {/* Stats */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        {loading
+          ? Array.from({length:4}).map((_,i) => (
+              <div key={i} className="rounded-2xl p-5 animate-pulse" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', height: 110 }} />
+            ))
+          : [
+              { icon: <Users />,      label: 'Suscriptores',    value: fmtK(ytData.subscribers),          color: '#a855f7' },
+              { icon: <Eye />,        label: 'Views totales',    value: fmtK(ytData.totalViews),           color: '#00d4ff' },
+              { icon: <Play />,       label: 'Vídeos',           value: `${ytData.totalVideos}`,           color: '#00ff88' },
+              { icon: <DollarSign />, label: 'Ingresos 30d',     value: `€${fmt(ytData.monthlyRevenue)}`,  color: '#f59e0b' },
+            ].map((s, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i*0.07 }}
+                className="rounded-2xl p-5 transition-all"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
+                  style={{ background: `${s.color}15`, border: `1px solid ${s.color}25` }}>
+                  {React.cloneElement(s.icon, { className: 'w-4 h-4', style: { color: s.color } })}
+                </div>
+                <p className="text-2xl font-black text-white">{s.value}</p>
+                <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
+              </motion.div>
+            ))
+        }
       </div>
 
-      {/* Sistema stats */}
-      <GlassCard className="p-6">
-        <div style={{color:'#fff',fontWeight:700,fontSize:'16px',marginBottom:'20px',display:'flex',alignItems:'center',gap:'8px'}}>
-          <Settings size={18} color="#00ff88"/>Sistema
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px'}}>
-          {[
-            {label:'Capital invertido',value:`€${fmt(state.investedCapital||0)}`,color:'#00ff88'},
-            {label:'Total retirado',value:`€${fmt(state.totalWithdrawals||0)}`,color:'#ff4444'},
-            {label:'Fondo reinversión',value:`€${fmt(state.reinvestmentFund||0)}`,color:'#f59e0b'},
-            {label:'Ganancias netas',value:`€${fmt(state.netGains||0)}`,color:'#00d4ff'},
-          ].map(s=>(
-            <div key={s.label} style={{background:'rgba(255,255,255,0.03)',borderRadius:'12px',padding:'16px',border:'1px solid rgba(255,255,255,0.06)'}}>
-              <div style={{color:s.color,fontWeight:700,fontSize:'20px',fontFamily:"'Space Grotesk',sans-serif"}}>{s.value}</div>
-              <div style={{color:'rgba(255,255,255,0.3)',fontSize:'12px',marginTop:'4px'}}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </GlassCard>
-    </div>
-  );
-}
-
-// ── Toast ─────────────────────────────────────────────────────────────────────
-function Toast({ toasts }: { toasts: any[] }) {
-  return (
-    <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,display:'flex',flexDirection:'column',gap:'8px'}}>
-      <AnimatePresence>
-        {toasts.map(t=>(
-          <motion.div key={t.id}
-            initial={{opacity:0,x:40,scale:0.9}}
-            animate={{opacity:1,x:0,scale:1}}
-            exit={{opacity:0,x:40,scale:0.9}}
-            style={{
-              display:'flex',alignItems:'center',gap:'10px',padding:'14px 18px',
-              background:t.type==='success'?'rgba(0,255,136,0.1)':'rgba(255,68,68,0.1)',
-              border:`1px solid ${t.type==='success'?'rgba(0,255,136,0.3)':'rgba(255,68,68,0.3)'}`,
-              borderRadius:'14px',backdropFilter:'blur(20px)',color:'#fff',fontSize:'14px',
-              fontFamily:"'Inter',sans-serif",maxWidth:'320px'
-            }}>
-            {t.type==='success' ? <CheckCircle2 size={18} color="#00ff88"/> : <AlertCircle size={18} color="#ff4444"/>}
-            {t.msg}
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ── Main App ──────────────────────────────────────────────────────────────────
-type Tab = 'dashboard'|'bot'|'binance'|'withdraw'|'admin';
-
-const TABS: {id:Tab; label:string; icon:React.ReactNode; color:string}[] = [
-  {id:'dashboard', label:'Dashboard',   icon:<LayoutDashboard size={18}/>, color:'#00ff88'},
-  {id:'bot',       label:'AI Asesor',   icon:<Brain size={18}/>,           color:'#00d4ff'},
-  {id:'binance',   label:'Bot ₿',       icon:<span style={{fontSize:'16px'}}>₿</span>,       color:'#f59e0b'},
-  {id:'withdraw',  label:'Retiros',     icon:<CreditCard size={18}/>,      color:'#f59e0b'},
-  {id:'admin',     label:'Admin',       icon:<Settings size={18}/>,        color:'#a855f7'},
-];
-
-const DEFAULT_STATE: SystemState = {
-  balance: 72.10, investedCapital: 200, totalWithdrawals: 50,
-  reinvestmentFund: 30, netGains: 22.10,
-  collaborators: [], transactions: [], webhookLogs: [], aiWorkers: [],
-  aiLogs: [], apiConfig: { geminiConnected: true, distributionWebhook:'', targetMarket:'ES', payoutModel:'SPLIT_70_30' }
-};
-
-// ─── Binance Bot Panel ───────────────────────────────────────────────────────
-function BinanceBotPanel({ showToast, balance }: { showToast: any; balance: number }) {
-  const [status, setStatus] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [investing, setInvesting] = useState(false);
-  const [pct, setPct] = useState(30);
-
-  async function checkStatus() {
-    setLoading(true);
-    try {
-      const r = await fetch(`${BACKEND}/api/binance/status`);
-      const d = await r.json();
-      setStatus(d);
-    } catch { showToast('error', 'Error al conectar con Binance'); }
-    setLoading(false);
-  }
-
-  async function invest() {
-    setInvesting(true);
-    try {
-      const r = await fetch(`${BACKEND}/api/binance/invest`, { method: 'POST' });
-      const d = await r.json();
-      if (d.success) {
-        showToast('success', d.message);
-        checkStatus();
-      } else {
-        showToast('error', d.error || d.message || 'Error al invertir');
-      }
-    } catch { showToast('error', 'Error de conexión'); }
-    setInvesting(false);
-  }
-
-  const toInvest = parseFloat((balance * pct / 100).toFixed(2));
-
-  return (
-    <div style={{display:'flex',flexDirection:'column',gap:'20px',maxWidth:'700px',margin:'0 auto'}}>
-      <GlassCard className="p-8" glow="#f59e0b">
-        <div style={{textAlign:'center',marginBottom:'28px'}}>
-          <div style={{
-            width:72,height:72,borderRadius:'50%',
-            background:'linear-gradient(135deg,#f59e0b,#ff6b00)',
-            display:'flex',alignItems:'center',justifyContent:'center',
-            margin:'0 auto 16px',boxShadow:'0 0 40px rgba(245,158,11,0.3)'
-          }}>
-            <span style={{fontSize:'32px'}}>₿</span>
-          </div>
-          <div style={{color:'#f59e0b',fontWeight:800,fontSize:'22px',fontFamily:"'Space Grotesk',sans-serif"}}>
-            Bot de Reinversión Binance
-          </div>
-          <div style={{color:'rgba(255,255,255,0.4)',fontSize:'13px',marginTop:'8px'}}>
-            Invierte automáticamente tus ganancias en crypto
-          </div>
-        </div>
-
-        {!status?.connected ? (
-          <div style={{
-            background:'rgba(255,255,255,0.04)',borderRadius:'14px',padding:'20px',
-            border:'1px solid rgba(245,158,11,0.2)',textAlign:'center',marginBottom:'20px'
-          }}>
-            <div style={{color:'#f59e0b',fontWeight:700,marginBottom:'8px'}}>⚠️ Binance no conectado</div>
-            <div style={{color:'rgba(255,255,255,0.5)',fontSize:'13px',lineHeight:'1.6'}}>
-              Para activar el bot necesitas añadir en Vercel:<br/>
-              <code style={{color:'#00ff88',fontSize:'12px'}}>BINANCE_API_KEY</code> y <code style={{color:'#00ff88',fontSize:'12px'}}>BINANCE_API_SECRET</code>
-            </div>
-          </div>
-        ) : (
-          <div style={{
-            background:'rgba(0,255,136,0.06)',borderRadius:'14px',padding:'16px',
-            border:'1px solid rgba(0,255,136,0.2)',marginBottom:'20px'
-          }}>
-            <div style={{color:'#00ff88',fontWeight:700,marginBottom:'12px'}}>✅ Binance conectado</div>
-            {(status.balances||[]).map((b:any,i:number)=>(
-              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',
-                borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-                <span style={{color:'rgba(255,255,255,0.6)',fontSize:'13px'}}>{b.asset}</span>
-                <span style={{color:'#fff',fontWeight:600,fontSize:'13px'}}>{parseFloat(b.free).toFixed(6)}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Bot Status */}
+        <Card delay={0.15}>
+          <SectionHeader icon={<Zap />} title="Estado del Bot" sub="Subidas automáticas cada 6h"
+            badge={<Badge color={botActive ? 'green' : 'amber'}><span className={`w-1.5 h-1.5 rounded-full inline-block ${botActive ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}/>{botActive ? 'Activo' : 'En pausa'}</Badge>}
+            iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+          <div className="space-y-2.5">
+            {[
+              { label: 'Próxima subida',      value: botActive ? 'En ~4h' : 'Pausado',        icon: <Clock className="w-3.5 h-3.5"/> },
+              { label: 'Frecuencia',          value: 'Cada 6 horas',                          icon: <RefreshCw className="w-3.5 h-3.5"/> },
+              { label: 'Views últimos 30d',   value: fmtK(ytData.views30d),                  icon: <Eye className="w-3.5 h-3.5"/> },
+              { label: 'Minutos vistos 30d',  value: fmtK(ytData.watchMinutes30d),            icon: <Clock className="w-3.5 h-3.5"/> },
+              { label: 'Tipo de contenido',   value: 'Sonidos · relajación · 432Hz',          icon: <Sparkles className="w-3.5 h-3.5"/> },
+            ].map((r, i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {r.icon}<span className="text-xs">{r.label}</span>
+                </div>
+                <span className="text-xs font-semibold text-white">{r.value}</span>
               </div>
             ))}
           </div>
-        )}
+        </Card>
 
-        {/* Slider reinversión */}
-        <div style={{marginBottom:'24px'}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
-            <span style={{color:'rgba(255,255,255,0.6)',fontSize:'14px'}}>% a reinvertir</span>
-            <span style={{color:'#f59e0b',fontWeight:700,fontSize:'16px'}}>{pct}%</span>
-          </div>
-          <input type="range" min={5} max={100} step={5} value={pct}
-            onChange={e=>setPct(Number(e.target.value))}
-            style={{width:'100%',accentColor:'#f59e0b',height:'6px'}}/>
-          <div style={{display:'flex',justifyContent:'space-between',marginTop:'8px'}}>
-            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>
-              Invertir: <strong style={{color:'#f59e0b'}}>€{toInvest}</strong>
-            </span>
-            <span style={{color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>
-              Retener: <strong style={{color:'#00ff88'}}>€{fmt(balance - toInvest)}</strong>
-            </span>
-          </div>
+        {/* Recent Videos */}
+        <Card delay={0.2}>
+          <SectionHeader icon={<Play />} title="Vídeos Recientes" sub="Últimas subidas" iconColor="#ef4444" iconBg="rgba(239,68,68,0.1)" />
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({length:3}).map((_,i) => (
+                <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.03)' }} />
+              ))}
+            </div>
+          ) : ytData.recentVideos.length === 0 ? (
+            <p className="text-xs text-center py-6" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Canal nuevo · aún sin vídeos publicados
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {ytData.recentVideos.map((v, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: 'rgba(239,68,68,0.08)' }}>
+                    <Play className="w-4 h-4 text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-white truncate">{v.title}</p>
+                    <div className="flex items-center gap-3 mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      <span className="text-xs flex items-center gap-1"><Eye className="w-3 h-3"/>{fmtK(v.views)}</span>
+                      <span className="text-xs flex items-center gap-1"><ThumbsUp className="w-3 h-3"/>{v.likes}</span>
+                      <span className="text-xs">{v.date}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Analytics 30d */}
+      <Card delay={0.25}>
+        <SectionHeader icon={<TrendingUp />} title="Analytics · Últimos 30 días" sub="Datos reales vía YouTube Analytics API"
+          iconColor="#ef4444" iconBg="rgba(239,68,68,0.1)"
+          badge={<Badge color={ytData.connected ? 'green' : 'amber'}>{ytData.connected ? '✅ Datos reales' : 'Cargando…'}</Badge>} />
+        <div className="grid grid-cols-3 gap-4 mt-2">
+          {[
+            { label: 'Vistas',         value: fmtK(ytData.views30d),                          color: '#00d4ff' },
+            { label: 'Min. vistos',    value: fmtK(ytData.watchMinutes30d),                   color: '#a855f7' },
+            { label: 'Revenue €',      value: `€${fmt(ytData.monthlyRevenue)}`,               color: '#f59e0b' },
+          ].map((s, i) => (
+            <div key={i} className="p-4 rounded-xl text-center"
+              style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${s.color}15` }}>
+              <p className="text-xl font-black" style={{ color: s.color }}>{loading ? '—' : s.value}</p>
+              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
+            </div>
+          ))}
         </div>
-
-        <div style={{display:'flex',gap:'12px'}}>
-          <button onClick={checkStatus} disabled={loading}
-            style={{
-              flex:1,padding:'14px',borderRadius:'12px',border:'1px solid rgba(245,158,11,0.3)',
-              background:'transparent',color:'#f59e0b',fontWeight:700,fontSize:'14px',cursor:'pointer',
-              opacity: loading ? 0.5 : 1
-            }}>
-            {loading ? '...' : '🔄 Verificar estado'}
-          </button>
-          <button onClick={invest} disabled={investing || !status?.connected || toInvest < 10}
-            style={{
-              flex:2,padding:'14px',borderRadius:'12px',border:'none',cursor:'pointer',
-              background:'linear-gradient(135deg,#f59e0b,#ff6b00)',
-              color:'#000',fontWeight:800,fontSize:'15px',
-              opacity: (investing || !status?.connected || toInvest < 10) ? 0.5 : 1,
-              boxShadow:'0 0 30px rgba(245,158,11,0.3)'
-            }}>
-            {investing ? 'Invirtiendo...' : `₿ Invertir €${toInvest} ahora`}
-          </button>
-        </div>
-        {toInvest < 10 && (
-          <div style={{textAlign:'center',marginTop:'10px',color:'rgba(255,255,255,0.3)',fontSize:'12px'}}>
-            Mínimo €10 para invertir (balance actual: €{fmt(balance)})
-          </div>
-        )}
-      </GlassCard>
-
-      {/* Info */}
-      <GlassCard className="p-6" glow="#8b5cf6">
-        <div style={{color:'#fff',fontWeight:700,marginBottom:'12px',fontSize:'15px'}}>📋 Cómo funciona</div>
-        {[
-          ['1', 'Tus ingresos (AdMob/YouTube) se acumulan en InverGrow'],
-          ['2', 'El bot coge el % que configures y compra crypto en Binance'],
-          ['3', 'La compra queda registrada automáticamente'],
-          ['4', 'Puedes activar inversión automática periódica (diaria/semanal)'],
-        ].map(([n,t])=>(
-          <div key={n} style={{display:'flex',gap:'12px',padding:'10px 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-            <div style={{
-              width:24,height:24,borderRadius:'50%',
-              background:'linear-gradient(135deg,#8b5cf6,#6366f1)',
-              display:'flex',alignItems:'center',justifyContent:'center',
-              fontSize:'11px',fontWeight:800,color:'#fff',flexShrink:0
-            }}>{n}</div>
-            <div style={{color:'rgba(255,255,255,0.6)',fontSize:'13px',lineHeight:'1.5'}}>{t}</div>
-          </div>
-        ))}
-      </GlassCard>
-    </div>
+      </Card>
+    </motion.div>
   );
 }
 
-function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [state, setState] = useState<SystemState>(DEFAULT_STATE);
-  const [toasts, setToasts] = useState<any[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 3 — RETIROS + REINVERSIÓN
+// ══════════════════════════════════════════════════════════════════════════════
+function WithdrawTab({ state, onWithdraw, showToast }: any) {
+  const [amount, setAmount]     = useState('');
+  const [desc, setDesc]         = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [reinvestPct, setReinvestPct] = useState(30);
 
-  function showToast(type:'success'|'error', msg:string) {
-    const id = Date.now();
-    setToasts(prev=>[...prev,{id,type,msg}]);
-    setTimeout(()=>setToasts(prev=>prev.filter(t=>t.id!==id)), 4000);
-  }
+  const totalMonthly = ADMOB.reduce((s,a)=>s+a.revenue,0) + AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.commission,0);
 
-  async function fetchState() {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0 || amt > state.balance) { showToast('error', 'Importe inválido o mayor al saldo.'); return; }
+    setLoading(true);
     try {
-      const r = await fetch(`${BACKEND}/api/state`);
-      if (r.ok) setState(await r.json());
-    } catch {}
-  }
-
-  async function handleWithdraw(amount: number, method = 'paypal', iban = '', ibanOwner = '') {
-    try {
-      const res = await fetch(`${BACKEND}/api/withdraw`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ amount, method, iban, ibanOwner })
+      await onWithdraw({
+        amount: amt,
+        method: 'paypal',
+        destination: 'joanlazaro83@gmail.com',
+        notes: desc || 'Retiro manual',
+        adminCode: 'joan123',
       });
-      const data = await res.json();
-      await fetchState();
-      if (data.success) {
-        if (data.paypalError || method === 'iban') {
-          showToast('info', `✅ Retiro de €${amount.toFixed(2)} registrado — recibirás email con instrucciones`);
-        } else {
-          showToast('success', `✅ Retiro de €${amount.toFixed(2)} enviado a PayPal`);
-        }
-      } else {
-        showToast('error', data.error || 'Error al procesar retiro');
-      }
-    } catch { showToast('error','Error al procesar retiro'); }
-  }
-
-  function handleAddCollaborator(c: any) {
-    setState(prev=>({...prev,collaborators:[...prev.collaborators,{...c,id:Date.now().toString(),lastPaymentDate:''}]}));
-  }
-
-  useEffect(()=>{ fetchState(); },[]);
+      setAmount(''); setDesc('');
+    } catch(err: any) { showToast('error', err.message || 'Error al procesar el retiro.'); }
+    setLoading(false);
+  };
 
   return (
-    <div style={{
-      minHeight:'100vh', background:'#040608', color:'#fff',
-      fontFamily:"'Inter', sans-serif", position:'relative'
-    }}>
-      <AnimatedBg/>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        {/* Balance + Withdraw Form */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* Balance Hero */}
+          <Card>
+            <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(0,255,136,0.08), transparent 60%)' }} />
+            <div className="relative z-10 text-center py-2">
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Saldo disponible</p>
+              <p className="text-5xl font-black" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>€{fmt(state.balance)}</p>
+              <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>PayPal · joanlazaro83@gmail.com</p>
+            </div>
+          </Card>
+
+          {/* Withdraw Form */}
+          <Card delay={0.1}>
+            <SectionHeader icon={<ArrowUpRight />} title="Solicitar Retiro" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Importe (€)</label>
+                <input type="number" placeholder="0.00" value={amount} onChange={e=>setAmount(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl text-sm font-mono text-white outline-none transition-all"
+                  style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} min="1" step="0.01" />
+                <div className="flex gap-2 mt-2">
+                  {[50,100,250,500].map(p => (
+                    <button key={p} type="button" onClick={() => setAmount(String(p))}
+                      className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                      style={{ background: amount===String(p) ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: amount===String(p) ? '#00ff88' : 'rgba(255,255,255,0.45)', border: `1px solid ${amount===String(p) ? 'rgba(0,255,136,0.3)' : 'rgba(255,255,255,0.07)'}` }}>
+                      €{p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Descripción</label>
+                <input type="text" placeholder="Retiro mensual..." value={desc} onChange={e=>setDesc(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+                  style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+              </div>
+              <button type="submit" disabled={loading}
+                className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                style={{ background:'linear-gradient(135deg,rgba(0,255,136,0.2),rgba(0,212,255,0.2))', border:'1px solid rgba(0,255,136,0.3)', color:'#00ff88' }}>
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin"/> : <ArrowUpRight className="w-4 h-4"/>}
+                {loading ? 'Procesando...' : 'Solicitar Retiro'}
+              </button>
+            </form>
+          </Card>
+        </div>
+
+        {/* Reinversion Panel */}
+        <div className="lg:col-span-7 space-y-5">
+          <Card delay={0.1}>
+            <SectionHeader icon={<Repeat />} title="Configuración de Reinversión" sub="Porcentaje automático de reinversión" iconColor="#a855f7" iconBg="rgba(168,85,247,0.1)" />
+            
+            {/* Slider */}
+            <div className="mb-5">
+              <div className="flex justify-between mb-2">
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Reinvertir</span>
+                <span className="text-sm font-black" style={{ color: '#a855f7' }}>{reinvestPct}%</span>
+              </div>
+              <input type="range" min={0} max={100} value={reinvestPct} onChange={e=>setReinvestPct(Number(e.target.value))}
+                className="w-full" style={{ accentColor: '#a855f7' }} />
+              <div className="flex justify-between mt-1">
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>0% (todo retiras)</span>
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>100% (todo reinviertes)</span>
+              </div>
+            </div>
+
+            {/* Breakdown */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Ingresos/mes', value: `€${fmt(totalMonthly)}`, color: '#00d4ff' },
+                { label: `Reinvertir (${reinvestPct}%)`, value: `€${fmt(totalMonthly * reinvestPct/100)}`, color: '#a855f7' },
+                { label: `Retirar (${100-reinvestPct}%)`, value: `€${fmt(totalMonthly * (1-reinvestPct/100))}`, color: '#00ff88' },
+              ].map((s, i) => (
+                <div key={i} className="p-4 rounded-xl text-center" style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${s.color}15` }}>
+                  <p className="text-lg font-black" style={{ color: s.color }}>{s.value}</p>
+                  <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Reinvest allocation */}
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Distribución de reinversión</p>
+              {[
+                { label: 'Crear más contenido YouTube', pct: 50, color: '#ef4444' },
+                { label: 'Herramientas & hosting',      pct: 30, color: '#00d4ff' },
+                { label: 'Fondo de reserva',            pct: 20, color: '#a855f7' },
+              ].map((r, i) => {
+                const reinvestTotal = totalMonthly * reinvestPct / 100;
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{r.label}</span>
+                      <span className="text-xs font-bold font-mono" style={{ color: r.color }}>€{fmt(reinvestTotal * r.pct/100)}</span>
+                    </div>
+                    <ProgressBar value={r.pct} max={100} color={r.color} />
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          {/* Withdrawal History */}
+          <Card delay={0.2}>
+            <SectionHeader icon={<Clock />} title="Historial de Retiros" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" />
+            {state.transactions.filter((t: any) => t.type === 'WITHDRAWAL').length === 0 ? (
+              <p className="text-xs py-6 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>Sin retiros registrados aún</p>
+            ) : state.transactions.filter((t: any) => t.type === 'WITHDRAWAL').map((tx: any) => (
+              <div key={tx.id} className="flex items-center justify-between p-3 rounded-xl mb-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div>
+                  <p className="text-xs font-semibold text-white">{tx.description}</p>
+                  <p className="text-xs font-mono mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>{tx.date} · {tx.reference}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-black text-white">-€{fmt(tx.amount)}</p>
+                  <Badge color={tx.status==='COMPLETED'?'green':tx.status==='PENDING'?'amber':'red'}>{tx.status}</Badge>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 4 — ADMIN · ADMOB · AFILIADOS
+// ══════════════════════════════════════════════════════════════════════════════
+function AdminTab({ state, onAddCollaborator, showToast }: any) {
+  const [name, setName]   = useState('');
+  const [role, setRole]   = useState('');
+  const [wage, setWage]   = useState('');
+  const [activeSection, setActiveSection] = useState<'info'|'admob'|'affiliate'>('info');
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name||!role||!wage) { showToast('error','Rellena todos los campos.'); return; }
+    await onAddCollaborator({ name, role, wage: parseFloat(wage) });
+    setName(''); setRole(''); setWage('');
+    showToast('success', `Colaborador ${name} añadido.`);
+  };
+
+  const totalAdmob = ADMOB.reduce((s,a)=>s+a.revenue,0);
+  const totalAffiliate = AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.commission,0);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+
+      {/* Section Switcher */}
+      <div className="flex gap-2 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        {[
+          { id: 'info' as const,       label: 'Sistema & Equipo', icon: <Shield className="w-3.5 h-3.5"/> },
+          { id: 'admob' as const,      label: 'AdMob',            icon: <BarChart3 className="w-3.5 h-3.5"/> },
+          { id: 'affiliate' as const,  label: 'Afiliados Amazon', icon: <ShoppingCart className="w-3.5 h-3.5"/> },
+        ].map(s => (
+          <button key={s.id} onClick={() => setActiveSection(s.id)}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all"
+            style={{
+              background: activeSection===s.id ? 'rgba(0,255,136,0.1)' : 'transparent',
+              color: activeSection===s.id ? '#00ff88' : 'rgba(255,255,255,0.4)',
+              border: activeSection===s.id ? '1px solid rgba(0,255,136,0.2)' : '1px solid transparent'
+            }}>
+            {s.icon}{s.label}
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {/* ── Sistema & Equipo ── */}
+        {activeSection === 'info' && (
+          <motion.div key="info" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* System Info */}
+            <Card>
+              <SectionHeader icon={<Shield />} title="Información del Sistema" iconColor="#a855f7" iconBg="rgba(168,85,247,0.1)" badge={<Badge color="green">v2.0</Badge>} />
+              <div className="space-y-2.5">
+                {[
+                  { label: 'Propietario',    value: 'Joan · r3dm' },
+                  { label: 'PayPal retiros', value: 'joanlazaro83@gmail.com' },
+                  { label: 'Amazon ID',      value: 'r3dm01-21' },
+                  { label: 'Canal YouTube',  value: '@Equilibrio-c2k' },
+                  { label: 'GitHub',         value: 'joanakar3dmoon/Invergrow' },
+                  { label: 'Supabase',       value: 'tolzqxflecqbjdefohom' },
+                  { label: 'Vercel',         value: 'invergrow.vercel.app' },
+                ].map((r,i) => (
+                  <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{r.label}</span>
+                    <span className="text-xs font-mono font-semibold text-white">{r.value}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Team */}
+            <Card delay={0.1}>
+              <SectionHeader icon={<Users />} title="Equipo & Nóminas" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
+              {state.collaborators.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  {state.collaborators.map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                      <div>
+                        <p className="text-xs font-bold text-white">{c.name}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{c.role}</p>
+                      </div>
+                      <span className="text-sm font-black" style={{ color: '#00ff88' }}>€{fmt(c.wage)}/mes</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <form onSubmit={handleAdd} className="space-y-3">
+                {[
+                  { placeholder: 'Nombre', value: name, setter: setName },
+                  { placeholder: 'Rol', value: role, setter: setRole },
+                ].map((f, i) => (
+                  <input key={i} className="w-full px-4 py-2.5 rounded-xl text-sm text-white outline-none"
+                    style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)' }}
+                    placeholder={f.placeholder} value={f.value} onChange={e=>f.setter(e.target.value)} />
+                ))}
+                <input type="number" className="w-full px-4 py-2.5 rounded-xl text-sm text-white outline-none"
+                  style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)' }}
+                  placeholder="Salario mensual (€)" value={wage} onChange={e=>setWage(e.target.value)} />
+                <button type="submit" className="w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                  style={{ background:'rgba(0,212,255,0.08)', border:'1px solid rgba(0,212,255,0.2)', color:'#00d4ff' }}>
+                  <Users className="w-4 h-4"/> Añadir Colaborador
+                </button>
+              </form>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* ── AdMob ── */}
+        {activeSection === 'admob' && (
+          <motion.div key="admob" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="space-y-5">
+            {/* Total */}
+            <Card>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.15)' }}>
+                    <BarChart3 className="w-6 h-6" style={{ color: '#00ff88' }} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white">Ingresos AdMob Totales</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>3 apps · Google AdMob · cuenta joanlazaro83@gmail.com</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-black" style={{ color: '#00ff88' }}>€{fmt(totalAdmob)}</p>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>este mes</p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Per App */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {ADMOB.map((a, i) => (
+                <Card key={i} delay={i*0.07} style={{ border: `1px solid ${a.color}15` }}>
+                  <div className="absolute top-0 right-0 w-20 h-20 rounded-full blur-3xl pointer-events-none" style={{ background: `${a.color}08` }} />
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-bold text-white">{a.app}</h4>
+                      <Badge color={i===0?'green':i===1?'teal':'purple'}>App {i+1}</Badge>
+                    </div>
+                    <p className="text-3xl font-black" style={{ color: a.color }}>€{fmt(a.revenue)}</p>
+                    <div className="mt-3 space-y-2">
+                      {[
+                        { label: 'eCPM', value: `€${fmt(a.ecpm)}` },
+                        { label: 'Impresiones', value: fmtK(a.impressions) },
+                      ].map((s,j) => (
+                        <div key={j} className="flex justify-between text-xs">
+                          <span style={{ color: 'rgba(255,255,255,0.4)' }}>{s.label}</span>
+                          <span className="font-mono font-semibold text-white">{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3">
+                      <ProgressBar value={a.revenue} max={totalAdmob} color={a.color} />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* AdMob chart */}
+            <Card delay={0.2}>
+              <div className="flex items-center justify-between mb-4">
+                <SectionHeader icon={<TrendingUp />} title="Rendimiento AdMob · 2026" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+              </div>
+              <div className="h-32">
+                <Sparkline data={[2.1,3.4,2.8,4.5,5.2,6.1,6.9]} color="#00ff88" />
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* ── Afiliados ── */}
+        {activeSection === 'affiliate' && (
+          <motion.div key="affiliate" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="space-y-5">
+            {/* Summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { label: 'Comisión total',     value: `€${fmt(totalAffiliate)}`, color: '#f59e0b' },
+                { label: 'Clics este mes',     value: `${AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.clicks,0)}`, color: '#00d4ff' },
+                { label: 'Conversiones',       value: `${AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.sales,0)}`, color: '#00ff88' },
+                { label: 'Productos activos',  value: `${AFFILIATE_PRODUCTS.length}`, color: '#a855f7' },
+              ].map((s,i) => (
+                <Card key={i} delay={i*0.07}>
+                  <p className="text-2xl font-black" style={{ color: s.color }}>{s.value}</p>
+                  <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
+                </Card>
+              ))}
+            </div>
+
+            {/* Product Table */}
+            <Card delay={0.15}>
+              <SectionHeader icon={<ShoppingCart />} title="Productos Afiliados" sub={`Amazon · ID: r3dm01-21`} iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" badge={<Badge color="green">Activo</Badge>} />
+              <div className="space-y-2.5">
+                {AFFILIATE_PRODUCTS.map((p, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                      <Package className="w-4 h-4" style={{ color: '#f59e0b' }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{p.name}</p>
+                      <div className="flex items-center gap-3 mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                        <span className="text-xs">{p.clicks} clics</span>
+                        <span className="text-xs">{p.sales} ventas</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black" style={{ color: '#f59e0b' }}>€{fmt(p.commission)}</p>
+                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>comisión</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 p-3 rounded-xl flex items-center gap-3" style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.12)' }}>
+                <Bell className="w-4 h-4 shrink-0" style={{ color: '#f59e0b' }} />
+                <p className="text-xs" style={{ color: '#f59e0b' }}>Crea links con tu ID <strong>r3dm01-21</strong> en tus vídeos de YouTube para maximizar comisiones.</p>
+              </div>
+            </Card>
+
+            {/* Affiliate Chart */}
+            <Card delay={0.25}>
+              <SectionHeader icon={<TrendingUp />} title="Comisiones Afiliados · 2026" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" badge={<Badge color="amber">+42%</Badge>} />
+              <div className="h-32">
+                <Sparkline data={[1.2,2.1,1.8,3.4,2.9,4.1,4.8]} color="#f59e0b" />
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function Toast({ msg }: { msg: { type: 'success'|'error'; text: string }|null }) {
+  return (
+    <AnimatePresence>
+      {msg && (
+        <motion.div
+          initial={{ opacity:0, y:40, scale:0.95 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, y:40 }}
+          className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl"
+          style={{ background: msg.type==='success'?'rgba(0,255,136,0.1)':'rgba(239,68,68,0.1)', border:`1px solid ${msg.type==='success'?'rgba(0,255,136,0.3)':'rgba(239,68,68,0.3)'}`, backdropFilter:'blur(20px)' }}>
+          {msg.type==='success' ? <CheckCircle2 className="w-4 h-4 text-green-400"/> : <AlertCircle className="w-4 h-4 text-red-400"/>}
+          <span className="text-sm font-semibold text-white">{msg.text}</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// APP ROOT
+// ══════════════════════════════════════════════════════════════════════════════
+type Tab = 'dashboard'|'youtube'|'withdraw'|'admin';
+
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id:'dashboard', label:'Dashboard', icon:<BarChart3 className="w-4 h-4"/> },
+  { id:'youtube',   label:'YouTube',   icon:<Youtube className="w-4 h-4"/> },
+  { id:'withdraw',  label:'Retiros',   icon:<Repeat className="w-4 h-4"/> },
+  { id:'admin',     label:'Admin',     icon:<Settings className="w-4 h-4"/> },
+];
+
+export default function App() {
+  const [state, setState] = useState<SystemState>({
+    balance: 0, investedCapital: 0, totalWithdrawals: 0,
+    reinvestmentFund: 0, netGains: 0,
+    collaborators: [], transactions: [], webhookLogs: [], aiWorkers: [], aiLogs: [],
+    apiConfig: { geminiConnected:false, distributionWebhook:'', targetMarket:'', payoutModel:'SPLIT_70_30' }
+  });
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ type:'success'|'error'; text:string }|null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const showToast = useCallback((type: 'success'|'error', text: string) => {
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const fetchState = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const res = await fetch('/api/data');
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (data && typeof data.balance !== 'undefined') setState(data);
+    } catch (e) {
+      console.error('fetchState error:', e);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchState();
+    const iv = setInterval(() => fetchState(true), 6000);
+    return () => clearInterval(iv);
+  }, [fetchState]);
+
+  const handleWithdraw = async (data: any) => {
+    const res = await fetch('/api/withdraw', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error al procesar el retiro');
+    await fetchState(true);
+    showToast('success', `Retiro de €${fmt(data.amount)} solicitado.`);
+  };
+
+  const handleAddCollaborator = async (col: any) => {
+    const res = await fetch('/api/collaborators', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(col) });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+    setState((await res.json()).data);
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: 'radial-gradient(ellipse at 20% 10%, rgba(0,255,136,0.04) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(168,85,247,0.04) 0%, transparent 50%), #040608' }}>
 
       {/* Header */}
-      <header style={{
-        position:'sticky',top:0,zIndex:40,
-        background:'rgba(4,6,8,0.8)', backdropFilter:'blur(24px)',
-        borderBottom:'1px solid rgba(255,255,255,0.06)',
-        padding:'0 24px',
-      }}>
-        <div style={{maxWidth:'1400px',margin:'0 auto',display:'flex',alignItems:'center',height:'64px',gap:'16px'}}>
+      <header className="sticky top-0 z-40" style={{ background:'rgba(4,6,8,0.8)', backdropFilter:'blur(24px)', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           {/* Logo */}
-          <div style={{display:'flex',alignItems:'center',gap:'10px',marginRight:'8px'}}>
-            <div style={{
-              width:36,height:36,borderRadius:'10px',
-              background:'linear-gradient(135deg,#00ff88,#00d4ff)',
-              display:'flex',alignItems:'center',justifyContent:'center',
-              boxShadow:'0 0 20px rgba(0,255,136,0.3)'
-            }}>
-              <TrendingUp size={20} color="#000"/>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
+              style={{ background:'linear-gradient(135deg,#00ff88,#00c4aa)', color:'#040608' }}>IG</div>
+            <div>
+              <h1 className="text-sm font-black text-white">InverGrow</h1>
+              <p style={{ color:'rgba(255,255,255,0.3)', fontSize:'0.6rem', fontFamily:'monospace' }}>v2.0 · Ingresos Pasivos IA</p>
             </div>
-            <span style={{fontWeight:800,fontSize:'18px',fontFamily:"'Space Grotesk',sans-serif",
-              background:'linear-gradient(135deg,#00ff88,#00d4ff)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
-              InverGrow
-            </span>
           </div>
 
-          {/* Tabs */}
-          <nav style={{display:'flex',gap:'4px',flex:1}}>
-            {TABS.map(tab=>(
-              <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+          {/* Desktop Nav */}
+          <nav className="hidden md:flex items-center gap-1 p-1 rounded-xl" style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)' }}>
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all"
                 style={{
-                  display:'flex',alignItems:'center',gap:'8px',padding:'8px 16px',
-                  borderRadius:'10px',border:'none',cursor:'pointer',fontSize:'14px',fontWeight:600,
-                  transition:'all 0.2s',fontFamily:"'Inter',sans-serif",
-                  background: activeTab===tab.id ? `${tab.color}15` : 'transparent',
-                  color: activeTab===tab.id ? tab.color : 'rgba(255,255,255,0.4)',
-                  boxShadow: activeTab===tab.id ? `0 0 20px ${tab.color}15` : 'none',
+                  background: activeTab===tab.id ? 'rgba(0,255,136,0.12)' : 'transparent',
+                  color: activeTab===tab.id ? '#00ff88' : 'rgba(255,255,255,0.45)',
+                  border: activeTab===tab.id ? '1px solid rgba(0,255,136,0.2)' : '1px solid transparent'
                 }}>
-                <span style={{color: activeTab===tab.id ? tab.color : 'rgba(255,255,255,0.3)'}}>
-                  {tab.icon}
-                </span>
-                {tab.label}
-                {tab.id==='bot' && (
-                  <span style={{
-                    background:'linear-gradient(135deg,#00ff88,#00d4ff)',color:'#000',
-                    borderRadius:'6px',padding:'1px 6px',fontSize:'10px',fontWeight:700
-                  }}>NEW</span>
-                )}
+                {tab.icon}{tab.label}
               </button>
             ))}
           </nav>
 
-          {/* Right */}
-          <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-            <div style={{display:'flex',alignItems:'center',gap:'8px',
-              background:'rgba(0,255,136,0.08)',border:'1px solid rgba(0,255,136,0.2)',
-              borderRadius:'20px',padding:'6px 14px'}}>
-              <div style={{width:6,height:6,borderRadius:'50%',background:'#00ff88'}}/>
-              <span style={{color:'#00ff88',fontSize:'13px',fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>
-                €{fmt(TOTAL_REVENUE)}/mes
-              </span>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono"
+              style={{ background:'rgba(0,255,136,0.06)', border:'1px solid rgba(0,255,136,0.15)', color:'#00ff88' }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"/>LIVE
             </div>
-            <button onClick={async()=>{setIsRefreshing(true);await fetchState();setIsRefreshing(false);showToast('success','Actualizado');}}
-              style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',
-                borderRadius:'10px',padding:'8px',cursor:'pointer',color:'rgba(255,255,255,0.5)',display:'flex'}}>
-              <RefreshCw size={16} style={{animation:isRefreshing?'spin 1s linear infinite':'none'}}/>
+            <button onClick={async()=>{ setIsRefreshing(true); await fetchState(); setIsRefreshing(false); showToast('success','Panel actualizado.'); }}
+              className="p-2 rounded-xl transition-all" style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)' }}>
+              <RefreshCw className={`w-4 h-4 text-white/60 ${isRefreshing?'animate-spin':''}`}/>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Content */}
-      <main style={{maxWidth:'1400px',margin:'0 auto',padding:'24px',position:'relative',zIndex:10}}>
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab}
-            initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-12}}
-            transition={{duration:0.2}}>
-            {activeTab==='dashboard' && <DashboardTab state={state}/>}
-            {activeTab==='bot'       && <AIBotTab/>}
-            {activeTab==='binance'   && <BinanceBotPanel showToast={showToast} balance={state.balance}/>}
-            {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast}/>}
-            {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast}/>}
-          </motion.div>
-        </AnimatePresence>
+      {/* Main */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-28 md:pb-8" style={{ touchAction: 'pan-y', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-32 gap-4">
+            <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor:'rgba(0,255,136,0.2)', borderTopColor:'#00ff88' }}/>
+            <p className="text-sm" style={{ color:'rgba(255,255,255,0.4)' }}>Cargando InverGrow...</p>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            <motion.div key={activeTab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.2}}>
+              {activeTab==='dashboard' && <DashboardTab state={state} />}
+              {activeTab==='youtube'   && <YoutubeTab />}
+              {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast} />}
+              {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast} />}
+            </motion.div>
+          </AnimatePresence>
+        )}
       </main>
 
-      {/* Bottom nav mobile */}
-      <nav style={{
-        position:'fixed',bottom:0,left:0,right:0,zIndex:40,
-        background:'rgba(4,6,8,0.9)',backdropFilter:'blur(24px)',
-        borderTop:'1px solid rgba(255,255,255,0.06)',
-        display:'flex',padding:'8px 16px 12px',
-        '@media(min-width:768px)':{display:'none'}
-      } as any} className="md:hidden">
-        {TABS.map(tab=>(
-          <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
-            style={{
-              flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',
-              border:'none',background:'transparent',cursor:'pointer',padding:'6px',
-              color: activeTab===tab.id ? tab.color : 'rgba(255,255,255,0.3)',
-              fontSize:'10px',fontFamily:"'Inter',sans-serif",fontWeight:600,transition:'color 0.2s'
-            }}>
+      {/* Mobile Nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex"
+        style={{ background:'rgba(4,6,8,0.95)', backdropFilter:'blur(24px)', borderTop:'1px solid rgba(255,255,255,0.07)', touchAction:'none' }}>
+        {TABS.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className="flex-1 flex flex-col items-center gap-1 py-3 transition-all relative"
+            style={{ color: activeTab===tab.id ? '#00ff88' : 'rgba(255,255,255,0.35)' }}>
             {tab.icon}
-            {tab.label}
+            <span style={{ fontSize:'0.65rem', fontWeight:700 }}>{tab.label}</span>
+            {activeTab===tab.id && (
+              <motion.div layoutId="mob-indicator" className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background:'#00ff88' }}/>
+            )}
           </button>
         ))}
       </nav>
 
-      <style>{`
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        ::-webkit-scrollbar{width:4px;height:4px}
-        ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px}
-        .md\\:hidden { display: flex !important; }
-        @media(min-width:768px) { .md\\:hidden { display: none !important; } }
-      `}</style>
-
-      <Toast toasts={toasts}/>
+      <Toast msg={toast} />
     </div>
   );
 }
-
-export default App;
