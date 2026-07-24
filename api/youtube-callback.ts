@@ -36,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).send(`<h2>No se obtuvo refresh_token. Respuesta: ${JSON.stringify(tokens)}</h2>`);
     }
 
-    // Guardar YouTube + AdMob (mismo token, scopes combinados)
+    // Solo actualizar yt_refresh_token (NO admob, que es de otra cuenta)
     await fetch(`${SUPABASE_URL}/rest/v1/invergrow_state?id=eq.main`, {
       method: 'PATCH',
       headers: {
@@ -47,16 +47,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       body: JSON.stringify({
         yt_refresh_token: tokens.refresh_token,
-        admob_refresh_token: tokens.refresh_token,
       }),
     });
 
     return res.status(200).send(`
       <html>
         <body style="font-family:sans-serif;text-align:center;padding:40px;background:#040608;color:#fff">
-          <h1 style="color:#00ff88">✅ YouTube + AdMob conectados</h1>
-          <p>Tokens reales guardados correctamente.</p>
-          <p style="color:rgba(255,255,255,0.4);font-size:12px">Puedes cerrar esta ventana y volver a InverGrow.</p>
+          <h1 style="color:#00ff88">✅ Canal Equilibrio conectado</h1>
+          <p>Token de YouTube actualizado con la cuenta <strong>equilibrioapp3@gmail.com</strong>.</p>
+          <p style="color:rgba(255,255,255,0.4);font-size:12px">Ahora incluye permisos de subida de vídeos.</p>
           <a href="https://invergrow.vercel.app" style="color:#00ff88">← Volver a InverGrow</a>
         </body>
       </html>
