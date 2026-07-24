@@ -7,7 +7,7 @@ const SCOPES = [
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/yt-analytics.readonly',
   'https://www.googleapis.com/auth/yt-analytics-monetary.readonly',
-  'https://www.googleapis.com/auth/admob.readonly',
+  'https://www.googleapis.com/auth/youtube.upload',
 ].join(' ');
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
@@ -18,5 +18,6 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   url.searchParams.set('scope', SCOPES);
   url.searchParams.set('access_type', 'offline');
   url.searchParams.set('prompt', 'consent');
+  url.searchParams.set('login_hint', 'equilibrioapp3@gmail.com');
   return res.redirect(url.toString());
 }
