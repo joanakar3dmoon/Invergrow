@@ -493,14 +493,16 @@ async function handleBinanceInvest(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Binance API no configurada. Añade BINANCE_API_KEY y BINANCE_API_SECRET en Vercel.' });
     }
 
-    // Obtener balance actual de InverGrow
-    const sbRes = await fetch(`${SUPABASE_URL}/rest/v1/apps?select=revenue`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    // Obtener balance actual de InverGrow desde invergrow_state
+    const sbRes = await fetch(\`\${SUPABASE_URL}/rest/v1/invergrow_state?id=eq.main&select=*\`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: \`Bearer \${SUPABASE_KEY}\` }
     });
-    const apps = await sbRes.json() as any[];
-    const totalBalance = apps.reduce((sum: number, a: any) => sum + (parseFloat(a.revenue) || 0), 0);
+    const rows = await sbRes.json() as any[];
+    const state = rows?.[0] || {};
+    const totalBalance = parseFloat(state.balance) || 0;
+    const reinvestPct = state.reinvest_percent || 70;
 
-    const amountToInvest = parseFloat((totalBalance * BINANCE_REINVEST_PCT / 100).toFixed(2));
+    const amountToInvest = parseFloat((totalBalance * reinvestPct / 100).toFixed(2));
 
     if (amountToInvest < 10) {
       return res.json({ success: false, message: `Balance insuficiente para invertir. Mínimo €10, disponible: €${amountToInvest}` });
