@@ -950,6 +950,15 @@ export default function App() {
     return () => clearInterval(iv);
   }, [fetchState]);
 
+  // Inicializar anuncios AdSense
+  useEffect(() => {
+    try {
+      if (window.adsbygoogle) {
+        window.adsbygoogle.push({});
+      }
+    } catch (e) {}
+  }, []);
+
   const handleWithdraw = async (data: any) => {
     const res = await fetch('/api/withdraw', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
     const json = await res.json();
@@ -1042,6 +1051,16 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      {/* Anuncio AdSense */}
+      <div className="max-w-6xl mx-auto px-4 pb-2">
+        <ins className="adsbygoogle"
+             style={{ display: 'block', width: '100%', height: '60px' }}
+             data-ad-client="ca-pub-4903263409458961"
+             data-ad-slot="8825147276"
+             data-ad-format="banner"
+             data-full-width-responsive="false"></ins>
+      </div>
 
       <Toast msg={toast} />
     </div>
