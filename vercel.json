@@ -3,9 +3,11 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/index.ts": { "maxDuration": 30 }
+    "api/index.ts": { "maxDuration": 30 },
+    "api/amazon-search.ts": { "maxDuration": 30 }
   },
   "rewrites": [
+    { "source": "/api/amazon-search",    "destination": "/api/amazon-search.ts" },
     { "source": "/api/data",             "destination": "/api/index.ts" },
     { "source": "/api/withdraw",         "destination": "/api/index.ts" },
     { "source": "/api/income",           "destination": "/api/index.ts" },
