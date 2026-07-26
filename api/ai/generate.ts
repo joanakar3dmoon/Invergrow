@@ -6,11 +6,11 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const STATE_ID = 'invergrow_main';
 
 async function supa(path: string, opts: RequestInit = {}) {
-  const res = await fetch(\`\${SUPABASE_URL}/rest/v1/\${path}\`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...opts,
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: \`Bearer \${SUPABASE_KEY}\`,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
       ...((opts.headers as Record<string, string>) || {}),
@@ -21,7 +21,7 @@ async function supa(path: string, opts: RequestInit = {}) {
 }
 
 async function getState(): Promise<any> {
-  const arr = await supa(\`apps?id=eq.\${STATE_ID}&select=description\`);
+  const arr = await supa(`apps?id=eq.${STATE_ID}&select=description`);
   if (Array.isArray(arr) && arr[0]?.description) {
     return JSON.parse(arr[0].description);
   }
@@ -29,10 +29,10 @@ async function getState(): Promise<any> {
 }
 
 async function saveState(state: any) {
-  const arr = await supa(\`apps?id=eq.\${STATE_ID}&select=id\`);
+  const arr = await supa(`apps?id=eq.${STATE_ID}&select=id`);
   const exists = Array.isArray(arr) && arr.length > 0;
   if (exists) {
-    await supa(\`apps?id=eq.\${STATE_ID}\`, {
+    await supa(`apps?id=eq.${STATE_ID}`, {
       method: 'PATCH',
       body: JSON.stringify({ description: JSON.stringify(state), updated_at: new Date().toISOString() }),
     });
@@ -46,7 +46,7 @@ async function saveState(state: any) {
 
 async function callGemini(prompt: string): Promise<string> {
   const res = await fetch(
-    \`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=\${GEMINI_API_KEY}\`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,51 +72,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { workerId, topic, prompt } = req.body;
     if (!topic || !prompt) return res.status(400).json({ error: 'Faltan topic o prompt' });
 
-    // Intentar generar contenido con Gemini, pero NO bloquear si falla
     let generatedText = '';
     let usedGemini = false;
     try {
       if (GEMINI_API_KEY && GEMINI_API_KEY.length > 10) {
-        const fullPrompt = \`Eres un experto en marketing de contenidos y monetización digital. 
-Tema: \${topic}
-Instrucciones: \${prompt}
+        const fullPrompt = `Eres un experto en marketing de contenidos y monetización digital.
+Tema: ${topic}
+Instrucciones: ${prompt}
 
-Genera el contenido solicitado de forma profesional, estructurada y lista para publicar.\`;
+Genera el contenido solicitado de forma profesional, estructurada y lista para publicar.`;
         generatedText = await callGemini(fullPrompt);
         usedGemini = true;
       }
     } catch (e: any) {
-      // Gemini falló — usamos texto genérico, pero seguimos generando ingresos
-      generatedText = \`### Contenido Generado: \${topic}\n\nGuía automatizada sobre \${topic} generada por InverGrow.\`;
+      // Gemini falló, seguimos con fallback
     }
 
     if (!generatedText) {
-      generatedText = \`### Contenido Generado: \${topic}\n\nGuía automatizada sobre \${topic} generada por InverGrow.\`;
+      generatedText = `### Contenido Generado: ${topic}\n\nGuía automatizada sobre ${topic} generada por InverGrow.`;
     }
 
     // === GENERAR INGRESOS SIEMPRE ===
-    const reward = Math.floor(18 + Math.random() * 22);  // €18-40 por ciclo
-    const payoutModel = 'SPLIT_70_30';
+    const reward = Math.floor(18 + Math.random() * 22);
     const toReinvest = parseFloat((reward * 0.7).toFixed(2));
     const toNet = parseFloat((reward * 0.3).toFixed(2));
 
-    // Guardar en estado
     const state = await getState();
     const worker = state.aiWorkers?.find((w: any) => w.id === workerId);
     const workerName = worker?.name || 'ContentBot';
 
-    // Actualizar balances
     state.reinvestmentFund = parseFloat(((state.reinvestmentFund || 0) + toReinvest).toFixed(2));
     state.netGains = parseFloat(((state.netGains || 0) + toNet).toFixed(2));
     if (worker) worker.totalGenerated = parseFloat(((worker.totalGenerated || 0) + reward).toFixed(2));
 
     const logEntry = {
-      id: \`log-\${Date.now()}\`,
+      id: `log-${Date.now()}`,
       timestamp: new Date().toLocaleTimeString('es-ES'),
       workerName,
       action: 'INGRESO GENERADO',
       revenue: reward,
-      details: \`Tema: \${topic} | \${generatedText.length} caracteres | €\${reward.toFixed(2)} generados (70% reinversión)\`,
+      details: `Tema: ${topic} | ${generatedText.length} caracteres | €${reward.toFixed(2)} generados (70% reinversión)`,
     };
 
     state.aiLogs = [logEntry, ...(state.aiLogs || [])].slice(0, 50);
@@ -124,7 +119,7 @@ Genera el contenido solicitado de forma profesional, estructurada y lista para p
 
     return res.status(200).json({
       success: true,
-      text: usedGemini ? generatedText : \`[Fallback] \${generatedText}\`,
+      text: usedGemini ? generatedText : `[Fallback] ${generatedText}`,
       revenue: reward,
       reinvestAmt: toReinvest,
       netAmt: toNet,
