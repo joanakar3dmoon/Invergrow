@@ -3,7 +3,7 @@ import {
   TrendingUp, Wallet, Activity, Users, ArrowUpRight, ArrowDownLeft,
   RefreshCw, Shield, Sparkles, ShoppingCart, Youtube, DollarSign,
   Zap, BarChart3, Clock, CheckCircle2, AlertCircle, ChevronRight,
-  Play, Eye, ThumbsUp, Settings, Repeat, Bell, Star, Package
+  Play, Eye, ThumbsUp, Settings, Repeat, Bell, Star, Package, Search, ExternalLink, Tag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SystemState } from './types';
@@ -11,6 +11,7 @@ import { SystemState } from './types';
 // ─── Constants ────────────────────────────────────────────────────────────────
 const fmt  = (n: number) => n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtK = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}K` : `${n}`;
+const AMAZON_TAG = 'r3dm01-21';
 
 // YT defaults — se sobreescriben con datos reales desde /api/youtube
 const YT_DEFAULT = {
@@ -20,52 +21,40 @@ const YT_DEFAULT = {
   recentVideos: [] as { title: string; views: number; likes: number; date: string }[],
 };
 
-const ADMOB = [
-  { app: 'Lanzarus',  revenue: 8.20,  ecpm: 1.40, impressions: 5840, color: '#00ff88' },
-  { app: 'r3dm/guia', revenue: 5.60,  ecpm: 0.90, impressions: 6222, color: '#00d4ff' },
-  { app: 'Nexusia',   revenue: 3.10,  ecpm: 0.75, impressions: 4133, color: '#a855f7' },
-];
-
-const AFFILIATE_PRODUCTS = [
-  { name: 'Auriculares Sony WH-1000XM5', clicks: 84, sales: 3, commission: 4.20 },
-  { name: 'Meditación Mindfulness libro', clicks: 61, sales: 2, commission: 1.80 },
-  { name: 'Altavoz Bluetooth JBL Flip 6', clicks: 52, sales: 1, commission: 2.30 },
-  { name: 'Diffuser aromas zen',           clicks: 47, sales: 1, commission: 1.40 },
-];
-
-// ─── Animated Counter ─────────────────────────────────────────────────────────
+// ─── UI Components ────────────────────────────────────────────────────────────
 function Counter({ value }: { value: number }) {
   const [disp, setDisp] = useState(0);
   useEffect(() => {
-    const start = performance.now();
-    const dur = 1200;
-    const step = (ts: number) => {
-      const p = Math.min((ts - start) / dur, 1);
-      const e = 1 - Math.pow(1 - p, 3);
-      setDisp(value * e);
-      if (p < 1) requestAnimationFrame(step);
+    let start = disp, end = value, duration = 800, startTime = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisp(Math.round(start + (end - start) * eased));
+      if (progress < 1) requestAnimationFrame(tick);
     };
-    requestAnimationFrame(step);
+    requestAnimationFrame(tick);
   }, [value]);
   return <>{fmt(disp)}</>;
 }
 
-// ─── SVG Sparkline ────────────────────────────────────────────────────────────
 function Sparkline({ data, color = '#00ff88' }: { data: number[]; color?: string }) {
-  const max = Math.max(...data), min = Math.min(...data), range = max - min || 1;
-  const W = 400, H = 120;
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * W},${H - ((v - min) / range) * H * 0.8 - 10}`);
-  const d = `M ${pts.join(' L ')}`;
-  const fill = `${d} L ${W},${H} L 0,${H} Z`;
-  const id = `g${color.replace('#','')}`;
+  if (!data.length) return null;
+  const W = 200, H = 60;
+  const max = Math.max(...data), min = Math.min(...data);
+  const range = max - min || 1;
+  const points = data.map((v, i) => `${(i/(data.length-1))*W},${H-((v-min)/range)*H*0.8-10}`).join(' ');
+  const d = `M${points}`;
+  const fill = `M0,${H} ${points} ${W},${H}Z`;
+  const id = `spark-${Math.random().toString(36).slice(2,6)}`;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" style={{ overflow: 'visible' }}>
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.2"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
         </linearGradient>
-        <filter id={`f${id}`}><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id={`f${id}`}><feDropShadow dx="0" dy="0" stdDeviation="2" floodColor={color} floodOpacity="0.4"/></filter>
       </defs>
       {[0.25,0.5,0.75].map(y => <line key={y} x1={0} y1={H*y} x2={W} y2={H*y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="5,4"/>)}
       <path d={fill} fill={`url(#${id})`}/>
@@ -77,7 +66,6 @@ function Sparkline({ data, color = '#00ff88' }: { data: number[]; color?: string
   );
 }
 
-// ─── Bar Chart ────────────────────────────────────────────────────────────────
 function BarChart({ data, color = '#00ff88', labels }: { data: number[]; color?: string; labels?: string[] }) {
   const max = Math.max(...data);
   return (
@@ -98,75 +86,48 @@ function BarChart({ data, color = '#00ff88', labels }: { data: number[]; color?:
   );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub, color, prefix = '€', suffix = '' }: any) {
-  const map: Record<string, { bg: string; border: string; glow: string }> = {
-    green:  { bg: 'rgba(0,255,136,0.06)',  border: 'rgba(0,255,136,0.15)',  glow: '0 0 40px rgba(0,255,136,0.08)' },
-    teal:   { bg: 'rgba(0,212,255,0.06)',  border: 'rgba(0,212,255,0.15)',  glow: '0 0 40px rgba(0,212,255,0.08)' },
-    purple: { bg: 'rgba(168,85,247,0.06)', border: 'rgba(168,85,247,0.15)', glow: '0 0 40px rgba(168,85,247,0.08)' },
-    orange: { bg: 'rgba(255,107,53,0.06)', border: 'rgba(255,107,53,0.15)', glow: '0 0 40px rgba(255,107,53,0.08)' },
-    gold:   { bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.15)', glow: '0 0 40px rgba(245,158,11,0.08)' },
-  };
-  const c = map[color] || map.green;
-  const textColor = { green:'#00ff88', teal:'#00d4ff', purple:'#a855f7', orange:'#ff6b35', gold:'#f59e0b' }[color] || '#00ff88';
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -3, boxShadow: c.glow }}
-      transition={{ duration: 0.35 }}
-      className="relative overflow-hidden rounded-2xl p-5"
-      style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${c.border}` }}
-    >
-      <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-3xl pointer-events-none" style={{ background: c.bg }} />
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>{label}</span>
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: c.bg, border: `1px solid ${c.border}` }}>
-            {React.cloneElement(icon, { className: 'w-3.5 h-3.5', style: { color: textColor } })}
-          </div>
-        </div>
-        <p className="text-3xl font-black tracking-tight" style={{ color: '#f1f5f9' }}>
-          {prefix}<Counter value={value} />{suffix}
-        </p>
-        <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{sub}</p>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl p-5 transition-all" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
+        style={{ background: `${color}15`, border: `1px solid ${color}25` }}>
+        {React.cloneElement(icon, { className: 'w-4 h-4', style: { color } })}
       </div>
+      <p className="text-2xl font-black text-white">{prefix}{value}{suffix}</p>
+      <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{label}</p>
+      {sub && <p className="text-xs mt-1.5" style={{ color: `${color}80` }}>{sub}</p>}
     </motion.div>
   );
 }
 
-// ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ icon, title, sub, badge, iconColor = '#00ff88', iconBg = 'rgba(0,255,136,0.1)' }: any) {
   return (
-    <div className="flex items-center justify-between mb-5">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: iconBg, border: `1px solid ${iconColor}25` }}>
-          {React.cloneElement(icon, { className: 'w-4 h-4', style: { color: iconColor } })}
-        </div>
-        <div>
-          <h3 className="text-sm font-bold text-white">{title}</h3>
-          {sub && <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{sub}</p>}
-        </div>
+    <div className="flex items-center gap-3 mb-4">
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: iconBg, border: `1px solid ${iconColor}20` }}>
+        {React.cloneElement(icon, { className: 'w-4 h-4', style: { color: iconColor } })}
       </div>
-      {badge}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold text-white">{title}</h3>
+          {badge}
+        </div>
+        {sub && <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{sub}</p>}
+      </div>
     </div>
   );
 }
 
-// ─── Glass Card ───────────────────────────────────────────────────────────────
 function Card({ children, className = '', delay = 0, style = {} }: any) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.4 }}
-      className={`rounded-2xl p-6 relative overflow-hidden ${className}`}
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', ...style }}
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
+      className={`rounded-2xl p-5 relative overflow-hidden ${className}`}
+      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', ...style }}>
       {children}
     </motion.div>
   );
 }
 
-// ─── Badge ────────────────────────────────────────────────────────────────────
 function Badge({ color = 'green', children }: any) {
   const map: Record<string, { bg: string; text: string; border: string }> = {
     green:  { bg: 'rgba(0,255,136,0.1)',  text: '#00ff88', border: 'rgba(0,255,136,0.25)' },
@@ -184,7 +145,6 @@ function Badge({ color = 'green', children }: any) {
   );
 }
 
-// ─── Progress Bar ─────────────────────────────────────────────────────────────
 function ProgressBar({ value, max, color = '#00ff88' }: { value: number; max: number; color?: string }) {
   const pct = Math.min((value / max) * 100, 100);
   return (
@@ -203,103 +163,82 @@ function ProgressBar({ value, max, color = '#00ff88' }: { value: number; max: nu
 // TAB 1 — DASHBOARD
 // ══════════════════════════════════════════════════════════════════════════════
 function DashboardTab({ state }: { state: SystemState }) {
-  const totalAdmob = ADMOB.reduce((s, a) => s + a.revenue, 0);
-  const totalYT = 0; // YouTube revenue se muestra en YoutubeTab con datos reales
-  const totalAffiliate = AFFILIATE_PRODUCTS.reduce((s, p) => s + p.commission, 0);
-  const totalMonthly = totalAdmob + totalYT + totalAffiliate;
-  const reinvestPct = 0.3;
-  const reinvestAmt = totalMonthly * reinvestPct;
-  const withdrawAmt = totalMonthly * (1 - reinvestPct);
-
-  const monthLabels = ['Ene','Feb','Mar','Abr','May','Jun','Jul'];
-  const monthData   = [820, 1240, 980, 1580, 1320, 1890, 2140];
-
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard icon={<Wallet />}       label="Saldo Total"        value={state.balance}          sub="↑ Actualizado en vivo"    color="green" />
-        <StatCard icon={<Repeat />}       label="Capital Invertido"  value={state.investedCapital}  sub="APR estimado 12.4%"       color="teal" />
-        <StatCard icon={<ArrowUpRight />} label="Total Retirado"     value={state.totalWithdrawals}  sub="Último hace 9 días"       color="orange" />
-        <StatCard icon={<Zap />}          label="Ingresos Este Mes"  value={totalMonthly}           sub="YouTube + AdMob + Afil."  color="gold" />
+        <StatCard icon={<Wallet />}       label="Saldo Disponible"   value={state.balance}          sub="↑ Actualizado en vivo"    color="#00ff88" />
+        <StatCard icon={<Repeat />}       label="Capital Invertido"  value={state.investedCapital}  sub="En contenido y activos"   color="#00d4ff" />
+        <StatCard icon={<ArrowUpRight />} label="Total Retirado"     value={state.totalWithdrawals}  sub="A PayPal real"            color="#f59e0b" />
+        <StatCard icon={<Zap />}          label="Ganancias Netas"    value={state.netGains}          sub="Histórico total"          color="#a855f7" />
       </div>
 
-      {/* Chart + Income Sources */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        {/* Monthly Chart */}
-        <Card className="lg:col-span-7" delay={0.05}>
-          <SectionHeader icon={<BarChart3 />} title="Evolución de Ingresos" sub="2026 · €/mes" badge={<Badge color="green"><TrendingUp className="w-3 h-3"/>+28%</Badge>} />
-          <div className="h-36">
-            <BarChart data={monthData} color="#00ff88" labels={monthLabels} />
-          </div>
-          <div className="grid grid-cols-3 gap-3 mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      {/* Resumen de Ingresos Reales */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <SectionHeader icon={<DollarSign />} title="Fuentes de Ingresos Reales" sub="Datos conectados a APIs reales" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+          <div className="space-y-3">
             {[
-              { label: 'Mejor mes', value: '€2.140', color: '#00ff88' },
-              { label: 'Media mensual', value: '€1.424', color: '#00d4ff' },
-              { label: 'Proyección anual', value: '€25.6K', color: '#a855f7' },
+              { label: 'AdSense (anuncios web)',      value: 'Pendiente de tráfico', color: '#00ff88', icon: <BarChart3 className="w-4 h-4"/> },
+              { label: 'Amazon Afiliados (r3dm01-21)', value: 'Pendiente de ventas',  color: '#f59e0b', icon: <ShoppingCart className="w-4 h-4"/> },
+              { label: 'YouTube (canal personal)',     value: 'Datos en pestaña YouTube', color: '#ef4444', icon: <Youtube className="w-4 h-4"/> },
             ].map((s, i) => (
-              <div key={i} className="text-center p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <p className="text-base font-black" style={{ color: s.color }}>{s.value}</p>
-                <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Income Breakdown */}
-        <Card className="lg:col-span-5" delay={0.1}>
-          <SectionHeader icon={<Activity />} title="Fuentes de Ingresos" sub="Este mes" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
-          <div className="space-y-4">
-            {[
-              { label: 'YouTube Equilibrio', value: totalYT,       max: totalMonthly, color: '#ef4444', icon: <Youtube className="w-3.5 h-3.5" /> },
-              { label: 'AdMob (3 apps)',     value: totalAdmob,    max: totalMonthly, color: '#00ff88', icon: <BarChart3 className="w-3.5 h-3.5" /> },
-              { label: 'Afiliados Amazon',   value: totalAffiliate,max: totalMonthly, color: '#f59e0b', icon: <ShoppingCart className="w-3.5 h-3.5" /> },
-            ].map((s, i) => (
-              <div key={i}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2" style={{ color: s.color }}>
-                    {s.icon}
-                    <span className="text-xs font-semibold text-white">{s.label}</span>
-                  </div>
-                  <span className="text-xs font-black font-mono" style={{ color: s.color }}>€{fmt(s.value)}</span>
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${s.color}10`, border: `1px solid ${s.color}20` }}>
+                  {React.cloneElement(s.icon, { className: 'w-4 h-4', style: { color: s.color } })}
                 </div>
-                <ProgressBar value={s.value} max={totalMonthly} color={s.color} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-white">{s.label}</p>
+                  <p className="text-xs mt-0.5" style={{ color: `${s.color}80` }}>{s.value}</p>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* Reinversion summary */}
-          <div className="mt-5 p-4 rounded-xl space-y-2" style={{ background: 'rgba(0,255,136,0.04)', border: '1px solid rgba(0,255,136,0.1)' }}>
-            <div className="flex justify-between text-xs">
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>🔄 Reinversión (30%)</span>
-              <span className="font-bold text-green-400">€{fmt(reinvestAmt)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>💸 Disponible para retirar</span>
-              <span className="font-bold text-white">€{fmt(withdrawAmt)}</span>
-            </div>
+          <div className="mt-4 p-3 rounded-xl" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.12)' }}>
+            <p className="text-xs" style={{ color: '#00ff88' }}>
+              ⚡ Los balances solo se actualizan con ingresos reales. Usa la pestaña <strong>Amazon</strong> para buscar productos y generar comisiones de afiliado.
+            </p>
           </div>
+        </Card>
+
+        {/* Últimas Transacciones */}
+        <Card delay={0.1}>
+          <SectionHeader icon={<Activity />} title="Últimas Transacciones" sub="Historial de movimientos reales" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
+          {state.transactions.length > 0 ? (
+            <div className="space-y-2">
+              {state.transactions.slice(0, 8).map((t: any, i: number) => (
+                <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: t.type==='DEPOSIT' ? 'rgba(0,255,136,0.08)' : 'rgba(239,68,68,0.08)' }}>
+                      {t.type==='DEPOSIT' ? <ArrowDownLeft className="w-3.5 h-3.5" style={{ color: '#00ff88' }} /> : <ArrowUpRight className="w-3.5 h-3.5" style={{ color: '#ef4444' }} />}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-white">{t.description || t.type}</p>
+                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{new Date(t.date).toLocaleDateString('es-ES')}</p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-black" style={{ color: t.type==='DEPOSIT' ? '#00ff88' : '#ef4444' }}>
+                    {t.type==='DEPOSIT' ? '+' : '-'}€{fmt(t.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center py-10 gap-3">
+              <Activity className="w-8 h-8" style={{ color: 'rgba(255,255,255,0.15)' }} />
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Aún no hay transacciones reales</p>
+            </div>
+          )}
         </Card>
       </div>
 
-      {/* Status Strip */}
+      {/* Balance Chart */}
       <Card delay={0.15}>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.15)' }}>
-              <Sparkles className="w-6 h-6" style={{ color: '#00ff88' }} />
-            </div>
-            <div>
-              <h3 className="font-bold text-white">Motor de Ingresos Pasivos</h3>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>YouTube · AdMob · Afiliados · Reinversión automática 24/7</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Badge color="green"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"/>ACTIVO</Badge>
-            <p className="text-2xl font-black" style={{ color: '#00ff88' }}>€{fmt(state.netGains)}<span className="text-xs font-normal text-white/40 ml-1">hoy</span></p>
-          </div>
+        <SectionHeader icon={<TrendingUp />} title="Evolución de Ganancias" sub="2026" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+        <div className="h-32">
+          <Sparkline data={[0.5, 0.8, 0.3, 1.2, 0.9, 1.5, 2.1]} color="#00ff88" />
         </div>
       </Card>
     </motion.div>
@@ -307,7 +246,7 @@ function DashboardTab({ state }: { state: SystemState }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TAB 2 — YOUTUBE + BOT
+// TAB 2 — YOUTUBE
 // ══════════════════════════════════════════════════════════════════════════════
 function YoutubeTab() {
   const [botActive, setBotActive] = useState(false);
@@ -315,69 +254,45 @@ function YoutubeTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/youtube', { method: 'POST' })
-      .then(r => r.json())
-      .then(d => {
-        if (d.connected && d.data) {
-          setYtData({
-            connected: true,
-            subscribers:      d.data.subscribers     || 0,
-            totalViews:       d.data.total_views      || 0,
-            totalVideos:      d.data.total_videos     || 0,
-            monthlyRevenue:   d.data.revenue_30d      || 0,
-            views30d:         d.data.views_30d        || 0,
-            watchMinutes30d:  d.data.watch_minutes_30d || 0,
-            recentVideos:     (d.data.recent_videos || []).map((v: any) => ({
-              title: v.title || 'Sin título',
-              views: v.views || 0,
-              likes: v.likes || 0,
-              date:  v.published_at
-                ? new Date(v.published_at).toLocaleDateString('es-ES', { day:'numeric', month:'short' })
-                : '—',
-            })),
-          });
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    (async () => {
+      try {
+        const res = await fetch('/api/youtube');
+        const data = await res.json();
+        if (data.connected) setYtData(data.data);
+        else setYtData(prev => ({ ...prev }));
+      } catch (e) {
+        console.error('YT fetch error:', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
-      {/* Channel Hero */}
+      {/* YouTube Connect */}
       <Card>
-        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 20% 50%, rgba(239,68,68,0.05), transparent 60%)' }} />
-        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-          <div className="flex items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
-              <Youtube className="w-8 h-8 text-red-500" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+              <Youtube className="w-6 h-6" style={{ color: '#ef4444' }} />
             </div>
             <div>
-              <h2 className="text-xl font-black text-white">@Equilibrio-c2k</h2>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>equilibrioapp3@gmail.com · Canal evergreen de relajación</p>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Badge color="red"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block"/>Live</Badge>
-                {ytData.connected
-                  ? <Badge color="green">✅ API Conectada</Badge>
-                  : <Badge color="amber">Conectando…</Badge>
-                }
-              </div>
+              <h3 className="font-bold text-white">YouTube Analytics</h3>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                {ytData.connected ? `@${ytData.channel_name || 'canal conectado'}` : 'Canal no conectado'}
+              </p>
             </div>
           </div>
-          <div className="flex flex-col gap-2 items-end">
-            <button onClick={() => setBotActive(v => !v)}
-              className="px-5 py-2.5 rounded-xl font-bold text-sm transition-all"
-              style={botActive
-                ? { background: 'rgba(0,255,136,0.15)', border: '1px solid rgba(0,255,136,0.3)', color: '#00ff88' }
-                : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>
-              {botActive ? '⏸ Pausar Bot' : '▶ Activar Bot'}
-            </button>
-            {!ytData.connected && !loading && (
+          <div className="flex items-center gap-3">
+            {ytData.connected ? (
+              <Badge color="green"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block mr-1"/>Conectado</Badge>
+            ) : (
               <a href="/api/youtube-auth-start"
                 className="px-4 py-2 rounded-xl font-bold text-xs transition-all text-center"
                 style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }}>
-                🔑 Re-autorizar YouTube
+                🔑 Conectar YouTube
               </a>
             )}
           </div>
@@ -410,137 +325,282 @@ function YoutubeTab() {
         }
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Bot Status */}
+      {/* Recent Videos */}
+      {ytData.recentVideos.length > 0 && (
         <Card delay={0.15}>
-          <SectionHeader icon={<Zap />} title="Estado del Bot" sub="Subidas automáticas cada 6h"
-            badge={<Badge color={botActive ? 'green' : 'amber'}><span className={`w-1.5 h-1.5 rounded-full inline-block ${botActive ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}/>{botActive ? 'Activo' : 'En pausa'}</Badge>}
-            iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+          <SectionHeader icon={<Play />} title="Vídeos Recientes" sub="Últimos 5 vídeos" iconColor="#ef4444" iconBg="rgba(239,68,68,0.1)" />
           <div className="space-y-2.5">
-            {[
-              { label: 'Próxima subida',      value: botActive ? 'En ~4h' : 'Pausado',        icon: <Clock className="w-3.5 h-3.5"/> },
-              { label: 'Frecuencia',          value: 'Cada 6 horas',                          icon: <RefreshCw className="w-3.5 h-3.5"/> },
-              { label: 'Views últimos 30d',   value: fmtK(ytData.views30d),                  icon: <Eye className="w-3.5 h-3.5"/> },
-              { label: 'Minutos vistos 30d',  value: fmtK(ytData.watchMinutes30d),            icon: <Clock className="w-3.5 h-3.5"/> },
-              { label: 'Tipo de contenido',   value: 'Sonidos · relajación · 432Hz',          icon: <Sparkles className="w-3.5 h-3.5"/> },
-            ].map((r, i) => (
-              <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-xl"
-                style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <div className="flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                  {r.icon}<span className="text-xs">{r.label}</span>
+            {ytData.recentVideos.map((v: any, i: number) => (
+              <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-white truncate">{v.title}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>👁️ {fmtK(v.views)}</span>
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>👍 {fmtK(v.likes)}</span>
+                  </div>
                 </div>
-                <span className="text-xs font-semibold text-white">{r.value}</span>
+                <span className="text-xs shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{v.date}</span>
               </div>
             ))}
           </div>
         </Card>
-
-        {/* Recent Videos */}
-        <Card delay={0.2}>
-          <SectionHeader icon={<Play />} title="Vídeos Recientes" sub="Últimas subidas" iconColor="#ef4444" iconBg="rgba(239,68,68,0.1)" />
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({length:3}).map((_,i) => (
-                <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.03)' }} />
-              ))}
-            </div>
-          ) : ytData.recentVideos.length === 0 ? (
-            <p className="text-xs text-center py-6" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              Canal nuevo · aún sin vídeos publicados
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {ytData.recentVideos.map((v, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-xl"
-                  style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: 'rgba(239,68,68,0.08)' }}>
-                    <Play className="w-4 h-4 text-red-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-white truncate">{v.title}</p>
-                    <div className="flex items-center gap-3 mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                      <span className="text-xs flex items-center gap-1"><Eye className="w-3 h-3"/>{fmtK(v.views)}</span>
-                      <span className="text-xs flex items-center gap-1"><ThumbsUp className="w-3 h-3"/>{v.likes}</span>
-                      <span className="text-xs">{v.date}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Analytics 30d */}
-      <Card delay={0.25}>
-        <SectionHeader icon={<TrendingUp />} title="Analytics · Últimos 30 días" sub="Datos reales vía YouTube Analytics API"
-          iconColor="#ef4444" iconBg="rgba(239,68,68,0.1)"
-          badge={<Badge color={ytData.connected ? 'green' : 'amber'}>{ytData.connected ? '✅ Datos reales' : 'Cargando…'}</Badge>} />
-        <div className="grid grid-cols-3 gap-4 mt-2">
-          {[
-            { label: 'Vistas',         value: fmtK(ytData.views30d),                          color: '#00d4ff' },
-            { label: 'Min. vistos',    value: fmtK(ytData.watchMinutes30d),                   color: '#a855f7' },
-            { label: 'Revenue €',      value: `€${fmt(ytData.monthlyRevenue)}`,               color: '#f59e0b' },
-          ].map((s, i) => (
-            <div key={i} className="p-4 rounded-xl text-center"
-              style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${s.color}15` }}>
-              <p className="text-xl font-black" style={{ color: s.color }}>{loading ? '—' : s.value}</p>
-              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
+      )}
     </motion.div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TAB 3 — RETIROS + REINVERSIÓN
+// TAB 3 — AMAZON SEARCH
+// ══════════════════════════════════════════════════════════════════════════════
+function AmazonTab() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    setSearching(true);
+    setError('');
+    setSearched(true);
+    try {
+      const res = await fetch(`/api/amazon-search?q=${encodeURIComponent(query.trim())}`);
+      const data = await res.json();
+      if (data.success) {
+        setResults(data.products);
+      } else {
+        setError(data.error || 'Error al buscar');
+      }
+    } catch (err: any) {
+      setError('Error de conexión. Intenta de nuevo.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const copyLink = (url: string, title: string) => {
+    navigator.clipboard.writeText(url);
+    alert(`🔗 Enlace copiado:\n${url}\n\nPégalo en tu vídeo de YouTube o redes sociales.`);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+
+      {/* Info Card */}
+      <Card>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
+              <ShoppingCart className="w-6 h-6" style={{ color: '#f59e0b' }} />
+            </div>
+            <div>
+              <h3 className="font-bold text-white">Amazon Afiliados</h3>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Gana comisiones reales con tu ID <strong>{AMAZON_TAG}</strong></p>
+            </div>
+          </div>
+          <Badge color="green">ID: {AMAZON_TAG}</Badge>
+        </div>
+      </Card>
+
+      {/* Search */}
+      <Card delay={0.07}>
+        <form onSubmit={handleSearch} className="flex gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'rgba(255,255,255,0.3)' }} />
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Busca productos en Amazon.es..."
+              className="w-full pl-11 pr-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
+            />
+          </div>
+          <button type="submit" disabled={searching || !query.trim()}
+            className="px-6 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-40"
+            style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b' }}>
+            {searching ? 'Buscando...' : 'Buscar'}
+          </button>
+        </form>
+      </Card>
+
+      {/* Results */}
+      {searching && (
+        <div className="flex flex-col items-center py-16 gap-4">
+          <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor: 'rgba(245,158,11,0.2)', borderTopColor: '#f59e0b' }}/>
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>Buscando en Amazon.es...</p>
+        </div>
+      )}
+
+      {error && (
+        <Card delay={0.1}>
+          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+            <AlertCircle className="w-4 h-4 shrink-0" style={{ color: '#ef4444' }} />
+            <p className="text-xs" style={{ color: '#ef4444' }}>{error}</p>
+          </div>
+        </Card>
+      )}
+
+      {!searching && searched && results.length === 0 && !error && (
+        <Card delay={0.1}>
+          <div className="flex flex-col items-center py-12 gap-3">
+            <Package className="w-10 h-10" style={{ color: 'rgba(255,255,255,0.15)' }} />
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No se encontraron productos para "{query}"</p>
+          </div>
+        </Card>
+      )}
+
+      {results.length > 0 && (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              {results.length} producto{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {results.map((product, i) => (
+              <motion.div key={product.asin} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                className="rounded-2xl p-4 relative overflow-hidden flex flex-col"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                
+                {/* Image */}
+                {product.image && (
+                  <div className="w-full aspect-square rounded-xl overflow-hidden mb-3 flex items-center justify-center"
+                    style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <img src={product.image} alt={product.title} className="w-full h-full object-contain" loading="lazy" />
+                  </div>
+                )}
+
+                {/* Title */}
+                <h4 className="text-xs font-semibold text-white line-clamp-2 mb-2 min-h-[2em]">{product.title}</h4>
+
+                {/* Price */}
+                <div className="mt-auto">
+                  {product.price ? (
+                    <p className="text-lg font-black" style={{ color: '#00ff88' }}>€{fmt(product.price)}</p>
+                  ) : (
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Precio no disponible</p>
+                  )}
+                  
+                  {/* Rating */}
+                  {product.rating && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs" style={{ color: '#f59e0b' }}>★ {product.rating}</span>
+                      {product.reviews > 0 && (
+                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>({product.reviews})</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Buttons */}
+                  <div className="flex gap-2 mt-3">
+                    <a
+                      href={product.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all"
+                      style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b' }}>
+                      <ExternalLink className="w-3.5 h-3.5"/> Ver en Amazon
+                    </a>
+                    <button
+                      onClick={() => copyLink(product.url, product.title)}
+                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all"
+                      style={{ background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.2)', color: '#00d4ff' }}>
+                      <Tag className="w-3.5 h-3.5"/> Link
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Tips */}
+          <Card delay={0.2}>
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                <Star className="w-4 h-4" style={{ color: '#f59e0b' }} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-white">Cómo ganar comisiones reales:</p>
+                <ul className="mt-2 space-y-1.5">
+                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>1. Busca productos relacionados con tu contenido</li>
+                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>2. Copia el enlace con tu ID <strong>{AMAZON_TAG}</strong></li>
+                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>3. Pega el enlace en la descripción de tus vídeos de YouTube</li>
+                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>4. Cuando alguien compre, recibirás una comisión real en tu panel</li>
+                </ul>
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
+    </motion.div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 4 — WITHDRAW
 // ══════════════════════════════════════════════════════════════════════════════
 function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [amount, setAmount]     = useState('');
   const [desc, setDesc]         = useState('');
   const [loading, setLoading]   = useState(false);
-  const [reinvestPct, setReinvestPct] = useState(30);
-
-  const totalMonthly = ADMOB.reduce((s,a)=>s+a.revenue,0) + AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.commission,0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
-    if (!amt || amt <= 0 || amt > state.balance) { showToast('error', 'Importe inválido o mayor al saldo.'); return; }
+    if (!amt || amt <= 0) { showToast('error','Introduce un importe válido.'); return; }
+    if (amt > state.balance) { showToast('error',`Saldo insuficiente. Disponible: €${fmt(state.balance)}`); return; }
     setLoading(true);
     try {
       await onWithdraw({
         amount: amt,
+        recipientEmail: 'joanlazaro83@gmail.com',
+        note: desc || `Retiro de €${amt} a PayPal`,
         method: 'paypal',
-        destination: 'joanlazaro83@gmail.com',
-        notes: desc || 'Retiro manual',
-        adminCode: 'joan123',
       });
-      setAmount(''); setDesc('');
-    } catch(err: any) { showToast('error', err.message || 'Error al procesar el retiro.'); }
-    setLoading(false);
+      setAmount('');
+      setDesc('');
+    } catch (err: any) {
+      showToast('error', err.message || 'Error al procesar el retiro');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        {/* Balance + Withdraw Form */}
+        {/* Balance Card */}
         <div className="lg:col-span-5 space-y-5">
-          {/* Balance Hero */}
           <Card>
-            <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(0,255,136,0.08), transparent 60%)' }} />
-            <div className="relative z-10 text-center py-2">
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Saldo disponible</p>
-              <p className="text-5xl font-black" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>€{fmt(state.balance)}</p>
+            <div className="text-center py-6">
+              <SectionHeader icon={<Wallet />} title="Saldo Disponible" sub="Retirable a PayPal" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+              <p className="text-5xl font-black mt-4" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
+                €{fmt(state.balance)}
+              </p>
               <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>PayPal · joanlazaro83@gmail.com</p>
             </div>
           </Card>
 
-          {/* Withdraw Form */}
+          {/* Info */}
+          <Card delay={0.07}>
+            <div className="flex items-start gap-3">
+              <Shield className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#00d4ff' }} />
+              <div>
+                <p className="text-xs font-bold text-white">Retiros por PayPal</p>
+                <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Los retiros se procesan a tu cuenta de PayPal vinculada. El dinero solo se envía cuando hay ingresos reales generados por comisiones de afiliados, AdSense o YouTube.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Withdraw Form */}
+        <div className="lg:col-span-7 space-y-5">
           <Card delay={0.1}>
             <SectionHeader icon={<ArrowUpRight />} title="Solicitar Retiro" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" />
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -553,100 +613,24 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                   {[50,100,250,500].map(p => (
                     <button key={p} type="button" onClick={() => setAmount(String(p))}
                       className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
-                      style={{ background: amount===String(p) ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: amount===String(p) ? '#00ff88' : 'rgba(255,255,255,0.45)', border: `1px solid ${amount===String(p) ? 'rgba(0,255,136,0.3)' : 'rgba(255,255,255,0.07)'}` }}>
+                      style={{ background: amount===String(p) ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: amount===String(p) ? '#00ff88' : 'rgba(255,255,255,0.4)' }}>
                       €{p}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Descripción</label>
-                <input type="text" placeholder="Retiro mensual..." value={desc} onChange={e=>setDesc(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+                <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Concepto (opcional)</label>
+                <input type="text" placeholder="Ej: Retiro mensual" value={desc} onChange={e=>setDesc(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
                   style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
               </div>
               <button type="submit" disabled={loading}
-                className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
-                style={{ background:'linear-gradient(135deg,rgba(0,255,136,0.2),rgba(0,212,255,0.2))', border:'1px solid rgba(0,255,136,0.3)', color:'#00ff88' }}>
-                {loading ? <RefreshCw className="w-4 h-4 animate-spin"/> : <ArrowUpRight className="w-4 h-4"/>}
-                {loading ? 'Procesando...' : 'Solicitar Retiro'}
+                className="w-full py-3.5 rounded-xl text-sm font-black transition-all disabled:opacity-40"
+                style={{ background:'linear-gradient(135deg,#00ff88,#00c4aa)', color:'#040608' }}>
+                {loading ? 'Procesando...' : 'Solicitar Retiro a PayPal'}
               </button>
             </form>
-          </Card>
-        </div>
-
-        {/* Reinversion Panel */}
-        <div className="lg:col-span-7 space-y-5">
-          <Card delay={0.1}>
-            <SectionHeader icon={<Repeat />} title="Configuración de Reinversión" sub="Porcentaje automático de reinversión" iconColor="#a855f7" iconBg="rgba(168,85,247,0.1)" />
-            
-            {/* Slider */}
-            <div className="mb-5">
-              <div className="flex justify-between mb-2">
-                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Reinvertir</span>
-                <span className="text-sm font-black" style={{ color: '#a855f7' }}>{reinvestPct}%</span>
-              </div>
-              <input type="range" min={0} max={100} value={reinvestPct} onChange={e=>setReinvestPct(Number(e.target.value))}
-                className="w-full" style={{ accentColor: '#a855f7' }} />
-              <div className="flex justify-between mt-1">
-                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>0% (todo retiras)</span>
-                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>100% (todo reinviertes)</span>
-              </div>
-            </div>
-
-            {/* Breakdown */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: 'Ingresos/mes', value: `€${fmt(totalMonthly)}`, color: '#00d4ff' },
-                { label: `Reinvertir (${reinvestPct}%)`, value: `€${fmt(totalMonthly * reinvestPct/100)}`, color: '#a855f7' },
-                { label: `Retirar (${100-reinvestPct}%)`, value: `€${fmt(totalMonthly * (1-reinvestPct/100))}`, color: '#00ff88' },
-              ].map((s, i) => (
-                <div key={i} className="p-4 rounded-xl text-center" style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${s.color}15` }}>
-                  <p className="text-lg font-black" style={{ color: s.color }}>{s.value}</p>
-                  <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Reinvest allocation */}
-            <div className="mt-4 space-y-2">
-              <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Distribución de reinversión</p>
-              {[
-                { label: 'Crear más contenido YouTube', pct: 50, color: '#ef4444' },
-                { label: 'Herramientas & hosting',      pct: 30, color: '#00d4ff' },
-                { label: 'Fondo de reserva',            pct: 20, color: '#a855f7' },
-              ].map((r, i) => {
-                const reinvestTotal = totalMonthly * reinvestPct / 100;
-                return (
-                  <div key={i}>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{r.label}</span>
-                      <span className="text-xs font-bold font-mono" style={{ color: r.color }}>€{fmt(reinvestTotal * r.pct/100)}</span>
-                    </div>
-                    <ProgressBar value={r.pct} max={100} color={r.color} />
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          {/* Withdrawal History */}
-          <Card delay={0.2}>
-            <SectionHeader icon={<Clock />} title="Historial de Retiros" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" />
-            {state.transactions.filter((t: any) => t.type === 'WITHDRAWAL').length === 0 ? (
-              <p className="text-xs py-6 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>Sin retiros registrados aún</p>
-            ) : state.transactions.filter((t: any) => t.type === 'WITHDRAWAL').map((tx: any) => (
-              <div key={tx.id} className="flex items-center justify-between p-3 rounded-xl mb-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <div>
-                  <p className="text-xs font-semibold text-white">{tx.description}</p>
-                  <p className="text-xs font-mono mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>{tx.date} · {tx.reference}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-white">-€{fmt(tx.amount)}</p>
-                  <Badge color={tx.status==='COMPLETED'?'green':tx.status==='PENDING'?'amber':'red'}>{tx.status}</Badge>
-                </div>
-              </div>
-            ))}
           </Card>
         </div>
       </div>
@@ -655,13 +639,13 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TAB 4 — ADMIN · ADMOB · AFILIADOS
+// TAB 5 — ADMIN
 // ══════════════════════════════════════════════════════════════════════════════
 function AdminTab({ state, onAddCollaborator, showToast }: any) {
   const [name, setName]   = useState('');
   const [role, setRole]   = useState('');
   const [wage, setWage]   = useState('');
-  const [activeSection, setActiveSection] = useState<'info'|'admob'|'affiliate'>('info');
+  const [activeSection, setActiveSection] = useState<'info'|'affiliate'>('info');
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -671,9 +655,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
     showToast('success', `Colaborador ${name} añadido.`);
   };
 
-  const totalAdmob = ADMOB.reduce((s,a)=>s+a.revenue,0);
-  const totalAffiliate = AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.commission,0);
-
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
@@ -681,7 +662,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
       <div className="flex gap-2 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
         {[
           { id: 'info' as const,       label: 'Sistema & Equipo', icon: <Shield className="w-3.5 h-3.5"/> },
-          { id: 'admob' as const,      label: 'AdMob',            icon: <BarChart3 className="w-3.5 h-3.5"/> },
           { id: 'affiliate' as const,  label: 'Afiliados Amazon', icon: <ShoppingCart className="w-3.5 h-3.5"/> },
         ].map(s => (
           <button key={s.id} onClick={() => setActiveSection(s.id)}
@@ -700,7 +680,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
         {/* ── Sistema & Equipo ── */}
         {activeSection === 'info' && (
           <motion.div key="info" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* System Info */}
             <Card>
               <SectionHeader icon={<Shield />} title="Información del Sistema" iconColor="#a855f7" iconBg="rgba(168,85,247,0.1)" badge={<Badge color="green">v2.0</Badge>} />
               <div className="space-y-2.5">
@@ -710,7 +689,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
                   { label: 'Amazon ID',      value: 'r3dm01-21' },
                   { label: 'Canal YouTube',  value: '@Equilibrio-c2k' },
                   { label: 'GitHub',         value: 'joanakar3dmoon/Invergrow' },
-                  { label: 'Supabase',       value: 'tolzqxflecqbjdefohom' },
                   { label: 'Vercel',         value: 'invergrow.vercel.app' },
                 ].map((r,i) => (
                   <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -721,7 +699,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
               </div>
             </Card>
 
-            {/* Team */}
             <Card delay={0.1}>
               <SectionHeader icon={<Users />} title="Equipo & Nóminas" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
               {state.collaborators.length > 0 && (
@@ -758,123 +735,49 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
           </motion.div>
         )}
 
-        {/* ── AdMob ── */}
-        {activeSection === 'admob' && (
-          <motion.div key="admob" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="space-y-5">
-            {/* Total */}
-            <Card>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.15)' }}>
-                    <BarChart3 className="w-6 h-6" style={{ color: '#00ff88' }} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white">Ingresos AdMob Totales</h3>
-                    <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>3 apps · Google AdMob · cuenta joanlazaro83@gmail.com</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-black" style={{ color: '#00ff88' }}>€{fmt(totalAdmob)}</p>
-                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>este mes</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Per App */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {ADMOB.map((a, i) => (
-                <Card key={i} delay={i*0.07} style={{ border: `1px solid ${a.color}15` }}>
-                  <div className="absolute top-0 right-0 w-20 h-20 rounded-full blur-3xl pointer-events-none" style={{ background: `${a.color}08` }} />
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-bold text-white">{a.app}</h4>
-                      <Badge color={i===0?'green':i===1?'teal':'purple'}>App {i+1}</Badge>
-                    </div>
-                    <p className="text-3xl font-black" style={{ color: a.color }}>€{fmt(a.revenue)}</p>
-                    <div className="mt-3 space-y-2">
-                      {[
-                        { label: 'eCPM', value: `€${fmt(a.ecpm)}` },
-                        { label: 'Impresiones', value: fmtK(a.impressions) },
-                      ].map((s,j) => (
-                        <div key={j} className="flex justify-between text-xs">
-                          <span style={{ color: 'rgba(255,255,255,0.4)' }}>{s.label}</span>
-                          <span className="font-mono font-semibold text-white">{s.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3">
-                      <ProgressBar value={a.revenue} max={totalAdmob} color={a.color} />
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-
-            {/* AdMob chart */}
-            <Card delay={0.2}>
-              <div className="flex items-center justify-between mb-4">
-                <SectionHeader icon={<TrendingUp />} title="Rendimiento AdMob · 2026" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
-              </div>
-              <div className="h-32">
-                <Sparkline data={[2.1,3.4,2.8,4.5,5.2,6.1,6.9]} color="#00ff88" />
-              </div>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* ── Afiliados ── */}
+        {/* ── Afiliados Info ── */}
         {activeSection === 'affiliate' && (
           <motion.div key="affiliate" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="space-y-5">
-            {/* Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { label: 'Comisión total',     value: `€${fmt(totalAffiliate)}`, color: '#f59e0b' },
-                { label: 'Clics este mes',     value: `${AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.clicks,0)}`, color: '#00d4ff' },
-                { label: 'Conversiones',       value: `${AFFILIATE_PRODUCTS.reduce((s,p)=>s+p.sales,0)}`, color: '#00ff88' },
-                { label: 'Productos activos',  value: `${AFFILIATE_PRODUCTS.length}`, color: '#a855f7' },
-              ].map((s,i) => (
-                <Card key={i} delay={i*0.07}>
-                  <p className="text-2xl font-black" style={{ color: s.color }}>{s.value}</p>
-                  <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
-                </Card>
-              ))}
-            </div>
-
-            {/* Product Table */}
-            <Card delay={0.15}>
-              <SectionHeader icon={<ShoppingCart />} title="Productos Afiliados" sub={`Amazon · ID: r3dm01-21`} iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" badge={<Badge color="green">Activo</Badge>} />
-              <div className="space-y-2.5">
-                {AFFILIATE_PRODUCTS.map((p, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
-                      <Package className="w-4 h-4" style={{ color: '#f59e0b' }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-white truncate">{p.name}</p>
-                      <div className="flex items-center gap-3 mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                        <span className="text-xs">{p.clicks} clics</span>
-                        <span className="text-xs">{p.sales} ventas</span>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-black" style={{ color: '#f59e0b' }}>€{fmt(p.commission)}</p>
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>comisión</p>
-                    </div>
+            <Card>
+              <SectionHeader icon={<ShoppingCart />} title="Amazon Afiliados" sub={`ID: ${AMAZON_TAG}`} iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" badge={<Badge color="green">Activo</Badge>} />
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.12)' }}>
+                  <p className="text-sm font-bold text-white mb-2">Tu ID de Afiliado</p>
+                  <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.3)' }}>
+                    <code className="text-sm font-mono" style={{ color: '#f59e0b' }}>{AMAZON_TAG}</code>
+                    <button onClick={() => { navigator.clipboard.writeText(AMAZON_TAG); showToast('success','ID copiado'); }}
+                      className="px-3 py-1 rounded-lg text-xs font-bold" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                      Copiar
+                    </button>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              <div className="mt-4 p-3 rounded-xl flex items-center gap-3" style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.12)' }}>
-                <Bell className="w-4 h-4 shrink-0" style={{ color: '#f59e0b' }} />
-                <p className="text-xs" style={{ color: '#f59e0b' }}>Crea links con tu ID <strong>r3dm01-21</strong> en tus vídeos de YouTube para maximizar comisiones.</p>
-              </div>
-            </Card>
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.12)' }}>
+                  <p className="text-sm font-bold text-white mb-2">📋 Cómo funciona</p>
+                  <ol className="space-y-2">
+                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>1. Ve a la pestaña <strong>Amazon</strong> y busca productos</li>
+                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>2. Copia el enlace con tu ID de afiliado</li>
+                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>3. Comparte en YouTube, TikTok o redes sociales</li>
+                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>4. Ganas entre 3-10% de comisión por cada venta</li>
+                  </ol>
+                </div>
 
-            {/* Affiliate Chart */}
-            <Card delay={0.25}>
-              <SectionHeader icon={<TrendingUp />} title="Comisiones Afiliados · 2026" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" badge={<Badge color="amber">+42%</Badge>} />
-              <div className="h-32">
-                <Sparkline data={[1.2,2.1,1.8,3.4,2.9,4.1,4.8]} color="#f59e0b" />
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.12)' }}>
+                  <p className="text-sm font-bold text-white mb-2">💰 Comisiones por categoría</p>
+                  <div className="space-y-2">
+                    {[
+                      { cat: 'Electrónica', rate: '3%' },
+                      { cat: 'Hogar y cocina', rate: '5%' },
+                      { cat: 'Libros', rate: '7%' },
+                      { cat: 'Moda y accesorios', rate: '10%' },
+                    ].map((c, i) => (
+                      <div key={i} className="flex justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{c.cat}</span>
+                        <span className="text-xs font-bold" style={{ color: '#00ff88' }}>{c.rate}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </Card>
           </motion.div>
@@ -904,11 +807,12 @@ function Toast({ msg }: { msg: { type: 'success'|'error'; text: string }|null })
 // ══════════════════════════════════════════════════════════════════════════════
 // APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
-type Tab = 'dashboard'|'youtube'|'withdraw'|'admin';
+type Tab = 'dashboard'|'youtube'|'amazon'|'withdraw'|'admin';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id:'dashboard', label:'Dashboard', icon:<BarChart3 className="w-4 h-4"/> },
   { id:'youtube',   label:'YouTube',   icon:<Youtube className="w-4 h-4"/> },
+  { id:'amazon',    label:'Amazon',    icon:<ShoppingCart className="w-4 h-4"/> },
   { id:'withdraw',  label:'Retiros',   icon:<Repeat className="w-4 h-4"/> },
   { id:'admin',     label:'Admin',     icon:<Settings className="w-4 h-4"/> },
 ];
@@ -979,13 +883,12 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-40" style={{ background:'rgba(4,6,8,0.8)', backdropFilter:'blur(24px)', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          {/* Logo */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
               style={{ background:'linear-gradient(135deg,#00ff88,#00c4aa)', color:'#040608' }}>IG</div>
             <div>
               <h1 className="text-sm font-black text-white">InverGrow</h1>
-              <p style={{ color:'rgba(255,255,255,0.3)', fontSize:'0.6rem', fontFamily:'monospace' }}>v2.0 · Ingresos Pasivos IA</p>
+              <p style={{ color:'rgba(255,255,255,0.3)', fontSize:'0.6rem', fontFamily:'monospace' }}>v2.0 · Ingresos Reales</p>
             </div>
           </div>
 
@@ -1029,6 +932,7 @@ export default function App() {
             <motion.div key={activeTab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.2}}>
               {activeTab==='dashboard' && <DashboardTab state={state} />}
               {activeTab==='youtube'   && <YoutubeTab />}
+              {activeTab==='amazon'    && <AmazonTab />}
               {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast} />}
               {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast} />}
             </motion.div>
