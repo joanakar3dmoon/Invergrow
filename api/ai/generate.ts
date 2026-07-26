@@ -3,7 +3,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tolzqxflecqbjdefohom.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
-const STATE_ID = 'invergrow_main';
 
 async function supa(path: string, opts: RequestInit = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -21,27 +20,16 @@ async function supa(path: string, opts: RequestInit = {}) {
 }
 
 async function getState(): Promise<any> {
-  const arr = await supa(`apps?id=eq.${STATE_ID}&select=description`);
-  if (Array.isArray(arr) && arr[0]?.description) {
-    return JSON.parse(arr[0].description);
-  }
-  return { balance: 0, netGains: 0, reinvestmentFund: 0, totalWithdrawals: 0, aiWorkers: [], aiLogs: [], webhookLogs: [] };
+  const arr = await supa('invergrow_state?id=eq.main&select=*');
+  if (Array.isArray(arr) && arr[0]) return arr[0];
+  return { balance: 0, net_gains: 0, invested_capital: 0, total_withdrawals: 0 };
 }
 
-async function saveState(state: any) {
-  const arr = await supa(`apps?id=eq.${STATE_ID}&select=id`);
-  const exists = Array.isArray(arr) && arr.length > 0;
-  if (exists) {
-    await supa(`apps?id=eq.${STATE_ID}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ description: JSON.stringify(state), updated_at: new Date().toISOString() }),
-    });
-  } else {
-    await supa('apps', {
-      method: 'POST',
-      body: JSON.stringify({ id: STATE_ID, name: 'InverGrow State', description: JSON.stringify(state) }),
-    });
-  }
+async function patchState(fields: Record<string, any>) {
+  await supa('invergrow_state?id=eq.main', {
+    method: 'PATCH',
+    body: JSON.stringify({ ...fields, updated_at: new Date().toISOString() }),
+  });
 }
 
 async function callGemini(prompt: string): Promise<string> {
@@ -72,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { workerId, topic, prompt } = req.body;
     if (!topic || !prompt) return res.status(400).json({ error: 'Faltan topic o prompt' });
 
+    // Intentar Gemini, pero no bloquear si falla
     let generatedText = '';
     let usedGemini = false;
     try {
@@ -80,51 +69,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 Tema: ${topic}
 Instrucciones: ${prompt}
 
-Genera el contenido solicitado de forma profesional, estructurada y lista para publicar.`;
+Genera el contenido solicitado de forma profesional.`;
         generatedText = await callGemini(fullPrompt);
         usedGemini = true;
       }
     } catch (e: any) {
-      // Gemini falló, seguimos con fallback
+      // Gemini fallo - usamos fallback
     }
 
     if (!generatedText) {
-      generatedText = `### Contenido Generado: ${topic}\n\nGuía automatizada sobre ${topic} generada por InverGrow.`;
+      generatedText = `### Contenido Generado: ${topic}\n\nGuia automatizada sobre ${topic} generada por InverGrow.`;
     }
 
-    // === GENERAR INGRESOS SIEMPRE ===
+    // Generar ingresos: €18-40 por ciclo
     const reward = Math.floor(18 + Math.random() * 22);
-    const toReinvest = parseFloat((reward * 0.7).toFixed(2));
-    const toNet = parseFloat((reward * 0.3).toFixed(2));
+    const reinvest70 = parseFloat((reward * 0.7).toFixed(2));
+    const net30 = parseFloat((reward * 0.3).toFixed(2));
 
+    // Leer estado actual de invergrow_state (misma tabla que el dashboard)
     const state = await getState();
-    const worker = state.aiWorkers?.find((w: any) => w.id === workerId);
-    const workerName = worker?.name || 'ContentBot';
 
-    state.reinvestmentFund = parseFloat(((state.reinvestmentFund || 0) + toReinvest).toFixed(2));
-    state.netGains = parseFloat(((state.netGains || 0) + toNet).toFixed(2));
-    if (worker) worker.totalGenerated = parseFloat(((worker.totalGenerated || 0) + reward).toFixed(2));
+    const currentBalance = parseFloat(state.balance) || 0;
+    const currentNetGains = parseFloat(state.net_gains) || 0;
+    const currentInvested = parseFloat(state.invested_capital) || 0;
 
-    const logEntry = {
-      id: `log-${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString('es-ES'),
-      workerName,
-      action: 'INGRESO GENERADO',
-      revenue: reward,
-      details: `Tema: ${topic} | ${generatedText.length} caracteres | €${reward.toFixed(2)} generados (70% reinversión)`,
-    };
+    // 70% a inversión (capital invertido), 30% a balance disponible
+    const newBalance = parseFloat((currentBalance + net30).toFixed(2));
+    const newNetGains = parseFloat((currentNetGains + reward).toFixed(2));
+    const newInvested = parseFloat((currentInvested + reinvest70).toFixed(2));
 
-    state.aiLogs = [logEntry, ...(state.aiLogs || [])].slice(0, 50);
-    await saveState(state);
+    // Guardar en invergrow_state
+    await patchState({
+      balance: newBalance,
+      net_gains: newNetGains,
+      invested_capital: newInvested,
+    });
 
     return res.status(200).json({
       success: true,
       text: usedGemini ? generatedText : `[Fallback] ${generatedText}`,
       revenue: reward,
-      reinvestAmt: toReinvest,
-      netAmt: toNet,
+      reinvestAmt: reinvest70,
+      netAmt: net30,
+      balance: newBalance,
+      netGains: newNetGains,
+      investedCapital: newInvested,
       usedGemini,
-      data: state,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
