@@ -25,13 +25,6 @@ async function getState(): Promise<any> {
   return { balance: 0, net_gains: 0, invested_capital: 0, total_withdrawals: 0 };
 }
 
-async function patchState(fields: Record<string, any>) {
-  await supa('invergrow_state?id=eq.main', {
-    method: 'PATCH',
-    body: JSON.stringify({ ...fields, updated_at: new Date().toISOString() }),
-  });
-}
-
 async function callGemini(prompt: string): Promise<string> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${GEMINI_API_KEY}`,
@@ -39,82 +32,77 @@ async function callGemini(prompt: string): Promise<string> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
       }),
     }
   );
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const data = await res.json() as any;
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
   try {
-    const { workerId, topic, prompt } = req.body;
-    if (!topic || !prompt) return res.status(400).json({ error: 'Faltan topic o prompt' });
+    // ─── Log de ejecución ───────────────────────────────────────────────
+    const timestamp = new Date().toISOString();
+    const logEntry = { timestamp, type: 'content_generation' };
 
-    // Intentar Gemini, pero no bloquear si falla
+    // ─── Generar contenido SEO con Gemini ──────────────────────────────
+    const topic = req.body?.topic || '';
+    const prompt = topic
+      ? `Escribe un artículo corto SEO-friendly (200-300 palabras) en español sobre "${topic}". Incluye recomendaciones de productos de Amazon donde sea relevante. Usa tono informativo y útil.`
+      : `Crea un artículo corto (200-300 palabras) en español sobre finanzas personales o productividad. Recomienda productos de Amazon útiles donde sea natural. Usa tono cercano y práctico.`;
+
     let generatedText = '';
     let usedGemini = false;
-    try {
-      if (GEMINI_API_KEY && GEMINI_API_KEY.length > 10) {
-        const fullPrompt = `Eres un experto en marketing de contenidos y monetización digital.
-Tema: ${topic}
-Instrucciones: ${prompt}
 
-Genera el contenido solicitado de forma profesional.`;
-        generatedText = await callGemini(fullPrompt);
-        usedGemini = true;
-      }
-    } catch (e: any) {
-      // Gemini fallo - usamos fallback
+    if (GEMINI_API_KEY && GEMINI_API_KEY.length > 10) {
+      usedGemini = true;
+      generatedText = await callGemini(prompt);
     }
-
     if (!generatedText) {
-      generatedText = `### Contenido Generado: ${topic}\n\nGuia automatizada sobre ${topic} generada por InverGrow.`;
+      usedGemini = false;
+      generatedText = `### Guía práctica: ${topic || 'Finanzas personales'}\n\nArtículo generado por InverGrow. Recomendamos productos de Amazon para ayudarte en tu día a día.`;
     }
 
-    // Generar ingresos: €18-40 por ciclo
-    const reward = Math.floor(18 + Math.random() * 22);
-    const reinvest70 = parseFloat((reward * 0.7).toFixed(2));
-    const net30 = parseFloat((reward * 0.3).toFixed(2));
-
-    // Leer estado actual de invergrow_state (misma tabla que el dashboard)
-    const state = await getState();
-
-    const currentBalance = parseFloat(state.balance) || 0;
-    const currentNetGains = parseFloat(state.net_gains) || 0;
-    const currentInvested = parseFloat(state.invested_capital) || 0;
-
-    // 70% a inversión (capital invertido), 30% a balance disponible
-    const newBalance = parseFloat((currentBalance + net30).toFixed(2));
-    const newNetGains = parseFloat((currentNetGains + reward).toFixed(2));
-    const newInvested = parseFloat((currentInvested + reinvest70).toFixed(2));
-
-    // Guardar en invergrow_state
-    await patchState({
-      balance: newBalance,
-      net_gains: newNetGains,
-      invested_capital: newInvested,
+    // ─── Guardar como contenido generado (NO como ingreso) ─────────────
+    await supa('invergrow_content', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: topic || 'Guía automática',
+        content: generatedText,
+        created_at: timestamp,
+        used_gemini: usedGemini,
+      }),
     });
+
+    // ─── Registrar transacción de AUDITORÍA (no ingreso) ───────────────
+    await supa('invergrow_transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'CONTENT',
+        status: 'COMPLETED',
+        amount: 0,
+        description: `Contenido generado: ${topic || 'automático'}`,
+        reference: 'GEN-' + Date.now().toString(36).toUpperCase(),
+        gateway: 'GEMINI',
+      }),
+    });
+
+    // ─── Devolver estado actual (sin cambios de balance) ───────────────
+    const state = await getState();
+    const balance = parseFloat(state.balance) || 0;
+    const netGains = parseFloat(state.net_gains) || 0;
+    const investedCapital = parseFloat(state.invested_capital) || 0;
 
     return res.status(200).json({
       success: true,
-      text: usedGemini ? generatedText : `[Fallback] ${generatedText}`,
-      revenue: reward,
-      reinvestAmt: reinvest70,
-      netAmt: net30,
-      balance: newBalance,
-      netGains: newNetGains,
-      investedCapital: newInvested,
+      text: generatedText,
       usedGemini,
+      balance,
+      netGains,
+      investedCapital,
+      note: 'Contenido generado. No se han añadido ingresos ficticios.',
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
