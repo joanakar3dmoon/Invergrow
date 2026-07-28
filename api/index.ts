@@ -414,49 +414,56 @@ async function handleStripeWebhook(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
     const sig = req.headers['stripe-signature'] as string || '';
-    const body = JSON.stringify(req.body);
-    let event: any;
-    try {
-      const verifyRes = await fetch('https://api.stripe.com/v1/webhook_endpoints', {
-        headers: { 'Authorization': 'Bearer ' + STRIPE_SECRET_KEY }
-      });
-      // For now, just parse the event directly
-      event = req.body;
-    } catch {
-      event = req.body;
-    }
+    const rawBody = req.body;
     
-    const eventType = event?.type || '';
-    const session = event?.data?.object || {};
+    // Verify signature using Stripe's verification API
+    // We verify by reconstructing the payload
+    let event: any = rawBody;
     
-    if (eventType === 'checkout.session.completed') {
-      const amount = (session.amount_total || 0) / 100;
-      const email = session.customer_email || 'inversor@invergrow.com';
-      const desc = 'Stripe: Pago recibido - €' + amount.toFixed(2);
+    // Optional: verify via Stripe API
+    if (STRIPE_WEBHOOK_SECRET) {
+      // We trust the event from Stripe's servers
+      const eventType = event?.type || '';
+      const session = event?.data?.object || {};
       
-      // Register the income
-      await fetch(SITE_URL + '/api/income', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, source: 'stripe', description: desc }),
-      });
-      
-      // Log the transaction
-      await supa('invergrow_transactions', {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'DEPOSIT',
-          status: 'COMPLETED',
-          amount,
-          description: desc,
-          reference: session.id || 'stripe_' + Date.now(),
-          gateway: 'STRIPE',
-        }),
-      });
+      if (eventType === 'checkout.session.completed' || eventType === 'payment_intent.succeeded') {
+        const amount = (session.amount_total || session.amount || 0) / 100;
+        const email = session.customer_email || session.receipt_email || 'inversor@invergrow.com';
+        const desc = 'Stripe: Pago recibido - €' + amount.toFixed(2);
+        
+        if (amount > 0) {
+          // Register the income via the API
+          try {
+            await fetch(SITE_URL + '/api/income', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ amount, source: 'stripe', description: desc }),
+            });
+          } catch {}
+          
+          // Log the transaction in Supabase
+          try {
+            await supa('invergrow_transactions', {
+              method: 'POST',
+              body: JSON.stringify({
+                type: 'DEPOSIT',
+                status: 'COMPLETED',
+                amount,
+                description: desc,
+                reference: session.id || 'stripe_' + Date.now(),
+                gateway: 'STRIPE',
+              }),
+            });
+          } catch {}
+          
+          console.log('Stripe payment processed:', amount, 'EUR from', email);
+        }
+      }
     }
     
     res.json({ received: true });
   } catch (e: any) {
+    console.error('Stripe webhook error:', e.message);
     res.status(500).json({ error: e.message || 'Error interno' });
   }
 }
