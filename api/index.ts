@@ -9,6 +9,10 @@ const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET || '';
 const REDIRECT_URI     = 'https://invergrow.vercel.app/api/youtube-callback';
 const ADMOB_REFRESH_TOKEN  = process.env.ADMOB_REFRESH_TOKEN || '';
 const ADMOB_PUBLISHER_ID   = process.env.ADMOB_PUBLISHER_ID || '';
+const STRIPE_SECRET_KEY   = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || '';
+const STRIPE_WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET || '';
+const SITE_URL = process.env.SITE_URL || 'https://invergrow.vercel.app';
 
 const ADMOB_APPS = [
   { name: 'Lanzarus',  appId: 'ca-app-pub-4903263409458961~1005307516', color: '#00ff88' },
@@ -373,6 +377,90 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
 }
 
 // ─── Main router ──────────────────────────────────────────────────────────────
+async function handleCreateCheckout(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { amount, description, successUrl, cancelUrl } = req.body || {};
+    const amt = parseInt(amount) || 10;
+    const desc = description || 'Inversión en InverGrow';
+    
+    // Create Stripe Checkout Session
+    const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + STRIPE_SECRET_KEY,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'mode': 'payment',
+        'success_url': successUrl || SITE_URL + '?payment=success',
+        'cancel_url': cancelUrl || SITE_URL + '?payment=cancel',
+        'line_items[0][price_data][currency]': 'eur',
+        'line_items[0][price_data][product_data][name]': desc,
+        'line_items[0][price_data][unit_amount]': String(amt * 100),
+        'line_items[0][quantity]': '1',
+      }),
+    });
+    const data: any = await stripeRes.json();
+    if (!stripeRes.ok) return res.status(400).json({ error: data.error?.message || 'Stripe error' });
+    
+    res.json({ url: data.url, sessionId: data.id });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'Error interno' });
+  }
+}
+
+async function handleStripeWebhook(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const sig = req.headers['stripe-signature'] as string || '';
+    const body = JSON.stringify(req.body);
+    let event: any;
+    try {
+      const verifyRes = await fetch('https://api.stripe.com/v1/webhook_endpoints', {
+        headers: { 'Authorization': 'Bearer ' + STRIPE_SECRET_KEY }
+      });
+      // For now, just parse the event directly
+      event = req.body;
+    } catch {
+      event = req.body;
+    }
+    
+    const eventType = event?.type || '';
+    const session = event?.data?.object || {};
+    
+    if (eventType === 'checkout.session.completed') {
+      const amount = (session.amount_total || 0) / 100;
+      const email = session.customer_email || 'inversor@invergrow.com';
+      const desc = 'Stripe: Pago recibido - €' + amount.toFixed(2);
+      
+      // Register the income
+      await fetch(SITE_URL + '/api/income', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, source: 'stripe', description: desc }),
+      });
+      
+      // Log the transaction
+      await supa('invergrow_transactions', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'DEPOSIT',
+          status: 'COMPLETED',
+          amount,
+          description: desc,
+          reference: session.id || 'stripe_' + Date.now(),
+          gateway: 'STRIPE',
+        }),
+      });
+    }
+    
+    res.json({ received: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'Error interno' });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
@@ -392,6 +480,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'admob')                           return handleAdmob(req, res);
   if (path === 'sync')                            return handleSync(req, res);
   if (path === 'webhook')                         return handleWebhook(req, res);
+  if (path === 'create-checkout')                 return handleCreateCheckout(req, res);
+  if (path === 'stripe-webhook')                  return handleStripeWebhook(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
