@@ -62,31 +62,6 @@ async function exchangeForAccessToken(refreshToken: string, clientId: string, cl
   return data.access_token;
 }
 
-
-// ─── Resend email helper ────────────────────────────────────────────────────
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-
-async function sendGmailNotification(subject: string, htmlBody: string): Promise<void> {
-  try {
-    if (!RESEND_API_KEY) return;
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'InverGrow <onboarding@resend.dev>',
-        to: ['joanlazaro83@gmail.com'],
-        subject,
-        html: htmlBody,
-      }),
-    });
-  } catch (e) {
-    console.error('Resend notify error:', e);
-  }
-}
-
 // ─── Route handlers ───────────────────────────────────────────────────────────
 
 async function handleData(req: VercelRequest, res: VercelResponse) {
@@ -118,185 +93,119 @@ async function handleData(req: VercelRequest, res: VercelResponse) {
   });
 }
 
-// ─── PayPal Payouts (Live) ───────────────────────────────────────────────────
-const PAYPAL_CLIENT_ID  = process.env.PAYPAL_CLIENT_ID  || '';
-const PAYPAL_SECRET     = process.env.PAYPAL_SECRET     || '';
-const PAYPAL_ENV        = process.env.PAYPAL_ENV        || 'live';
-const PAYPAL_BASE       = PAYPAL_ENV === 'live'
-  ? 'https://api-m.paypal.com'
-  : 'https://api-m.sandbox.paypal.com';
+// ─── PayPal helpers ────────────────────────────────────────────────────────────
+const PAYPAL_CLIENT = process.env.PAYPAL_CLIENT_ID || '';
+const PAYPAL_SECRET = process.env.PAYPAL_SECRET || '';
+const PAYPAL_BASE = process.env.PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 
 async function getPayPalToken(): Promise<string> {
-  const creds = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString('base64');
+  const creds = Buffer.from(`${PAYPAL_CLIENT}:${PAYPAL_SECRET}`).toString('base64');
   const res = await fetch(`${PAYPAL_BASE}/v1/oauth2/token`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Basic ${creds}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'grant_type=client_credentials',
   });
   const data = await res.json() as any;
-  if (!data.access_token) throw new Error(`PayPal auth error: ${JSON.stringify(data)}`);
+  if (!data.access_token) throw new Error('No se pudo obtener token PayPal: ' + JSON.stringify(data));
   return data.access_token;
 }
 
-async function sendPayPalPayout(amountEur: number, recipientEmail: string, note: string): Promise<{ batchId: string; status: string }> {
+async function sendPayPalPayout(recipientEmail: string, amountEur: number, note: string): Promise<any> {
   const token = await getPayPalToken();
-  const batchId = `INV-${Date.now()}`;
+  const senderBatchId = `invergrow_${Date.now()}`;
   const body = {
     sender_batch_header: {
-      sender_batch_id: batchId,
-      email_subject: 'Retiro InverGrow',
-      email_message: note || 'Tu retiro de InverGrow ha sido procesado.',
+      sender_batch_id: senderBatchId,
+      email_subject: 'InverGrow — Tu retiro ha sido procesado',
+      email_message: note || 'Tu retiro de InverGrow ha sido procesado correctamente.',
     },
     items: [{
       recipient_type: 'EMAIL',
       amount: { value: amountEur.toFixed(2), currency: 'EUR' },
-      note: note || 'Retiro InverGrow',
-      sender_item_id: `item-${Date.now()}`,
       receiver: recipientEmail,
+      note: note || 'Retiro InverGrow',
+      sender_item_id: `item_${Date.now()}`,
     }],
   };
   const res = await fetch(`${PAYPAL_BASE}/v1/payments/payouts`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await res.json() as any;
-  if (!res.ok) throw new Error(`PayPal payout error: ${JSON.stringify(data)}`);
-  return {
-    batchId: data.batch_header?.payout_batch_id || batchId,
-    status: data.batch_header?.batch_status || 'PENDING',
-  };
+  if (!res.ok) throw new Error('PayPal error: ' + JSON.stringify(data));
+  return data;
 }
 
 async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
   if (req.method === 'GET') {
     const state = await getState();
     const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=20');
-    return res.status(200).json({
-      balance: parseFloat(state.balance) || 0,
-      netGains: parseFloat(state.net_gains) || 0,
-      totalWithdrawals: parseFloat(state.total_withdrawals) || 0,
-      transactions: Array.isArray(txArr) ? txArr : [],
-      paypalConnected: !!(PAYPAL_CLIENT_ID && PAYPAL_SECRET),
-      paypalEnv: PAYPAL_ENV,
-    });
+    return res.status(200).json({ balance: parseFloat(state.balance) || 0, netGains: parseFloat(state.net_gains) || 0, totalWithdrawals: parseFloat(state.total_withdrawals) || 0, transactions: Array.isArray(txArr) ? txArr : [] });
   }
-
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
-
   try {
-    const { amount, adminCode, recipientEmail, note, method, iban, ibanOwner } = req.body || {};
-
-    if (adminCode && adminCode !== ADMIN_CODE) {
-      return res.status(403).json({ error: 'Código admin incorrecto' });
-    }
-
+    const { amount, method = 'paypal', adminCode, description, paypalEmail, iban, bankName, accountHolder } = req.body || {};
+    if (adminCode && adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: 'Importe inválido' });
-
     const state = await getState();
     const available = parseFloat((state.balance || 0).toFixed(2));
-    if (amt > available) {
-      return res.status(400).json({ error: `Saldo insuficiente. Disponible: €${available.toFixed(2)}`, available });
-    }
-
-    // Descontar saldo ANTES del envío
-    const newBalance     = parseFloat((available - amt).toFixed(2));
+    if (amt > available) return res.status(400).json({ error: `Saldo insuficiente. Disponible: €${available.toFixed(2)}`, available });
+    const newBalance = parseFloat((available - amt).toFixed(2));
     const newWithdrawals = parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2));
-    await patchState({ balance: newBalance, total_withdrawals: newWithdrawals });
+    const ref = `WD-${Date.now()}`;
+    let txStatus = 'COMPLETED';
+    let txDesc = description || `Retiro ${method}`;
 
-    // Enviar via PayPal Payouts
-    const email = recipientEmail || 'joanlazaro83@gmail.com';
-    const ref   = `WD-${Date.now()}`;
-    let paypalBatchId = '';
-    let paypalStatus  = 'COMPLETED';
-    let paypalMsg     = `Retiro de €${amt.toFixed(2)} procesado correctamente.`;
-
-    if (PAYPAL_CLIENT_ID && PAYPAL_SECRET) {
-      try {
-        const payout = await sendPayPalPayout(amt, email, note || `Retiro InverGrow ${ref}`);
-        paypalBatchId = payout.batchId;
-        paypalStatus  = payout.status;
-        paypalMsg     = `Retiro de €${amt.toFixed(2)} enviado a ${email} via PayPal. Batch: ${paypalBatchId}`;
-      } catch (ppErr: any) {
-        // Si PayPal falla, restaurar saldo y registrar como PENDIENTE
-        await patchState({ balance: available, total_withdrawals: state.total_withdrawals });
-        // Registrar como pendiente para revisión manual
-        await supa('invergrow_transactions', {
-          method: 'POST',
-          body: JSON.stringify({
-            type: 'WITHDRAWAL',
-            amount: amt,
-            status: 'PENDING',
-            reference: ref,
-            description: `Retiro pendiente → ${email} (revisar PayPal)`,
-            gateway: 'PAYPAL',
-          }),
-        });
-        // Enviar email de aviso para procesar manualmente
-        const isIban = method === 'iban' && iban;
-        const paypalLink = `https://www.paypal.com/myaccount/transfer/send?recipient=${encodeURIComponent(email)}&amount=${amt.toFixed(2)}&currencyCode=EUR`;
-        const emailSubject = isIban
-          ? `💰 InverGrow — Retiro por IBAN: €${amt.toFixed(2)}`
-          : `💰 InverGrow — Retiro pendiente: €${amt.toFixed(2)}`;
-        const emailHtml = isIban ? `
-          <div style="font-family:sans-serif;max-width:500px;margin:auto;background:#0a0a0a;color:#fff;padding:32px;border-radius:16px;border:1px solid #00ff8844">
-            <h2 style="color:#00ff88;margin:0 0 8px">💰 Retiro por IBAN solicitado</h2>
-            <p style="color:#aaa;margin:0 0 24px">Referencia: <code style="color:#00ff88">${ref}</code></p>
-            <table style="width:100%;border-collapse:collapse">
-              <tr><td style="color:#aaa;padding:8px 0;border-bottom:1px solid #222">Importe</td><td style="color:#fff;font-weight:700;text-align:right">€${amt.toFixed(2)}</td></tr>
-              <tr><td style="color:#aaa;padding:8px 0;border-bottom:1px solid #222">IBAN</td><td style="color:#00ff88;font-family:monospace;text-align:right">${iban}</td></tr>
-              <tr><td style="color:#aaa;padding:8px 0">Titular</td><td style="color:#fff;text-align:right">${ibanOwner || '—'}</td></tr>
-            </table>
-            <p style="color:#666;font-size:12px;margin-top:24px">Haz la transferencia desde tu banco a este IBAN por el importe indicado.</p>
-          </div>` : `
-          <div style="font-family:sans-serif;max-width:500px;margin:auto;background:#0a0a0a;color:#fff;padding:32px;border-radius:16px;border:1px solid #00ff8844">
-            <h2 style="color:#00ff88;margin:0 0 8px">💰 Retiro PayPal pendiente</h2>
-            <p style="color:#aaa;margin:0 0 24px">Ref: <code style="color:#00ff88">${ref}</code></p>
-            <p style="color:#fff;font-size:24px;font-weight:700">€${amt.toFixed(2)}</p>
-            <p style="color:#aaa">Destinatario: <strong style="color:#fff">${email}</strong></p>
-            <a href="${paypalLink}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#00ff88;color:#000;font-weight:700;border-radius:8px;text-decoration:none">Enviar por PayPal →</a>
-          </div>`;
-        await sendGmailNotification(emailSubject, emailHtml);      }
+    if (method === 'paypal') {
+      const email = paypalEmail || 'joanlazaro83@gmail.com';
+      if (PAYPAL_CLIENT && PAYPAL_SECRET) {
+        try {
+          const ppResult = await sendPayPalPayout(email, amt, description || 'Retiro InverGrow');
+          const batchId = ppResult?.batch_header?.payout_batch_id || '';
+          txDesc = `PayPal Payout enviado a ${email} — Batch: ${batchId}`;
+          txStatus = 'COMPLETED';
+        } catch (ppErr: any) {
+          txDesc = `PayPal error: ${ppErr.message}. Retiro registrado como pendiente.`;
+          txStatus = 'PENDING';
+        }
+      } else {
+        txDesc = `Retiro PayPal de €${amt.toFixed(2)} a ${email} — pendiente (falta config PayPal)`;
+        txStatus = 'PENDING';
+      }
+    } else if (method === 'bank') {
+      const maskedIban = iban ? `${iban.slice(0,4)}...${iban.slice(-4)}` : 'IBAN****';
+      const holder = accountHolder || 'Titular';
+      txDesc = `Transferencia SEPA de €${amt.toFixed(2)} al IBAN ${maskedIban} (${holder}) — pendiente de procesar manualmente.`;
+      txStatus = 'PENDING';
+    } else if (method === 'card') {
+      txDesc = `Retiro a tarjeta de €${amt.toFixed(2)} — pendiente de procesar.`;
+      txStatus = 'PENDING';
+    } else {
+      txDesc = `Retiro de €${amt.toFixed(2)} (${method}) — pendiente.`;
+      txStatus = 'PENDING';
     }
 
-    // Registrar transacción
+    await patchState({ balance: newBalance, total_withdrawals: newWithdrawals });
     await supa('invergrow_transactions', {
       method: 'POST',
       body: JSON.stringify({
-        type: 'WITHDRAWAL',
-        amount: amt,
-        status: paypalStatus,
-        reference: ref,
-        description: `Retiro PayPal → ${email}`,
-        gateway: 'PAYPAL',
+        type: 'WITHDRAWAL', amount: amt, status: txStatus,
+        reference: ref, description: txDesc, gateway: method.toUpperCase(),
+        paypal_email: method === 'paypal' ? (paypalEmail || 'joanlazaro83@gmail.com') : null,
+        iban: method === 'bank' ? iban : null,
+        bank_name: bankName || null,
+        account_holder: accountHolder || null,
       }),
     });
-
     return res.status(200).json({
-      success: true,
-      reference: ref,
-      batchId: paypalBatchId,
-      amount: amt,
-      newBalance,
-      totalWithdrawals: newWithdrawals,
-      destination: email,
-      message: paypalMsg,
+      success: true, reference: ref, amount: amt,
+      newBalance, totalWithdrawals: newWithdrawals,
+      status: txStatus,
+      message: txDesc,
     });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
 async function handleIncome(req: VercelRequest, res: VercelResponse) {
@@ -464,109 +373,6 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
 }
 
 // ─── Main router ──────────────────────────────────────────────────────────────
-
-// ─── Binance Auto-Invest Bot ─────────────────────────────────────────────────
-const BINANCE_API_KEY    = process.env.BINANCE_API_KEY // configured || '';
-const BINANCE_API_SECRET = process.env.BINANCE_API_SECRET || '';
-const BINANCE_REINVEST_PCT = parseFloat(process.env.BINANCE_REINVEST_PCT || '30'); // % a reinvertir
-const BINANCE_SYMBOL    = process.env.BINANCE_SYMBOL || 'BTCEUR'; // par por defecto
-
-async function binanceRequest(method: string, path: string, params: Record<string,string> = {}) {
-  const crypto = await import('crypto');
-  const timestamp = Date.now().toString();
-  const queryParams = new URLSearchParams({ ...params, timestamp, recvWindow: '5000' });
-  const signature = crypto.createHmac('sha256', BINANCE_API_SECRET)
-    .update(queryParams.toString()).digest('hex');
-  queryParams.append('signature', signature);
-
-  const url = `https://api.binance.com${path}?${queryParams.toString()}`;
-  const res = await fetch(url, {
-    method,
-    headers: { 'X-MBX-APIKEY': BINANCE_API_KEY }
-  });
-  return res.json();
-}
-
-async function handleBinanceInvest(req: VercelRequest, res: VercelResponse) {
-  try {
-    if (!BINANCE_API_KEY || !BINANCE_API_SECRET) {
-      return res.status(400).json({ error: 'Binance API no configurada. Añade BINANCE_API_KEY y BINANCE_API_SECRET en Vercel.' });
-    }
-
-    // Obtener balance actual de InverGrow desde invergrow_state
-    const sbRes = await fetch(\`\${SUPABASE_URL}/rest/v1/invergrow_state?id=eq.main&select=*\`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: \`Bearer \${SUPABASE_KEY}\` }
-    });
-    const rows = await sbRes.json() as any[];
-    const state = rows?.[0] || {};
-    const totalBalance = parseFloat(state.balance) || 0;
-    const reinvestPct = state.reinvest_percent || 70;
-
-    const amountToInvest = parseFloat((totalBalance * reinvestPct / 100).toFixed(2));
-
-    if (amountToInvest < 10) {
-      return res.json({ success: false, message: `Balance insuficiente para invertir. Mínimo €10, disponible: €${amountToInvest}` });
-    }
-
-    // Obtener precio actual del par
-    const tickerRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${BINANCE_SYMBOL}`);
-    const ticker = await tickerRes.json() as any;
-    const price = parseFloat(ticker.price);
-    const qty = parseFloat((amountToInvest / price).toFixed(6));
-
-    // Crear orden de compra a mercado
-    const order = await binanceRequest('POST', '/api/v3/order', {
-      symbol: BINANCE_SYMBOL,
-      side: 'BUY',
-      type: 'MARKET',
-      quoteOrderQty: amountToInvest.toString()
-    });
-
-    if (order.orderId) {
-      // Registrar en Supabase como retiro de reinversión
-      await fetch(`${SUPABASE_URL}/rest/v1/withdrawals`, {
-        method: 'POST',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          reference: `BNB-${order.orderId}`,
-          amount: amountToInvest,
-          status: 'COMPLETED',
-          gateway: 'BINANCE',
-          description: `Reinversión automática: ${qty} ${BINANCE_SYMBOL} @ €${price.toFixed(2)}`,
-          created_at: new Date().toISOString()
-        })
-      });
-
-      return res.json({
-        success: true,
-        orderId: order.orderId,
-        symbol: BINANCE_SYMBOL,
-        amount: amountToInvest,
-        qty,
-        price,
-        message: `✅ Invertidos €${amountToInvest} en ${BINANCE_SYMBOL} (${qty} unidades @ €${price.toFixed(2)})`
-      });
-    } else {
-      return res.json({ success: false, error: order.msg || 'Error en Binance', details: order });
-    }
-  } catch (e: any) {
-    return res.status(500).json({ error: e.message });
-  }
-}
-
-async function handleBinanceStatus(req: VercelRequest, res: VercelResponse) {
-  try {
-    if (!BINANCE_API_KEY || !BINANCE_API_SECRET) {
-      return res.json({ connected: false, message: 'API no configurada' });
-    }
-    const account = await binanceRequest('GET', '/api/v3/account');
-    const balances = (account.balances || []).filter((b: any) => parseFloat(b.free) > 0);
-    return res.json({ connected: true, balances, reinvestPct: BINANCE_REINVEST_PCT, symbol: BINANCE_SYMBOL });
-  } catch (e: any) {
-    return res.status(500).json({ error: e.message });
-  }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
@@ -586,8 +392,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'admob')                           return handleAdmob(req, res);
   if (path === 'sync')                            return handleSync(req, res);
   if (path === 'webhook')                         return handleWebhook(req, res);
-  if (path === 'binance/invest')                  return handleBinanceInvest(req, res);
-  if (path === 'binance/status')                  return handleBinanceStatus(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
