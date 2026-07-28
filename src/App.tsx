@@ -805,9 +805,130 @@ function Toast({ msg }: { msg: { type: 'success'|'error'; text: string }|null })
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 6 — INVEST (Stripe Checkout)
+// ══════════════════════════════════════════════════════════════════════════════
+function InvestTab() {
+  const [amount, setAmount] = useState(10);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{text:string;ok:boolean}|null>(null);
+  const [showCustom, setShowCustom] = useState(false);
+
+  const presets = [10, 25, 50, 100, 250, 500];
+
+  const doCheckout = async (amt?: number) => {
+    const a = amt || amount;
+    if (a < 1) { setMsg({text:'El mínimo son 1€', ok:false}); return; }
+    setLoading(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          amount: a,
+          description: 'Inversión en InverGrow',
+          successUrl: window.location.origin + '?payment=success',
+          cancelUrl: window.location.origin + '?payment=cancel',
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setMsg({text:'Error al crear el pago: ' + (data.error || 'desconocido'), ok:false});
+      }
+    } catch (e: any) {
+      setMsg({text:'Error de conexión: ' + e.message, ok:false});
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
+      <Card>
+        <SectionHeader icon={<DollarSign />} title="Invertir en InverGrow" sub="Pago 100% seguro via Stripe" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+        
+        <p className="text-sm text-zinc-400 mt-4 mb-6">
+          Invierte y ayuda a crecer el ecosistema R3DMOON. Los fondos se usan para promoción, 
+          desarrollo de apps y contenido. Puedes retirar tus ganancias via PayPal cuando quieras.
+        </p>
+
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          {presets.map(p => (
+            <button key={p} onClick={() => { setAmount(p); setShowCustom(false); }}
+              className="py-4 rounded-xl font-bold text-lg transition-all"
+              style={{
+                background: amount===p ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)',
+                border: '1px solid ' + (amount===p ? 'rgba(0,255,136,0.3)' : 'rgba(255,255,255,0.08)'),
+                color: amount===p ? '#00ff88' : 'rgba(255,255,255,0.6)'
+              }}>
+              {p}€
+            </button>
+          ))}
+        </div>
+
+        {showCustom && (
+          <div className="flex gap-3 mb-6">
+            <input type="number" min={1} value={amount} onChange={e=>setAmount(parseInt(e.target.value)||1)}
+              className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white font-bold text-lg"
+              placeholder="Cantidad en €" />
+          </div>
+        )}
+        <button onClick={() => setShowCustom(!showCustom)} className="text-xs text-zinc-500 hover:text-zinc-300 mb-4">
+          {showCustom ? 'Usar cantidades predefinidas' : 'Cantidad personalizada'}
+        </button>
+
+        {msg && (
+          <div className="p-4 rounded-xl mb-4 text-sm font-bold" style={{
+            background: msg.ok ? 'rgba(0,255,136,0.1)' : 'rgba(239,68,68,0.1)',
+            border: '1px solid ' + (msg.ok ? 'rgba(0,255,136,0.2)' : 'rgba(239,68,68,0.2)'),
+            color: msg.ok ? '#00ff88' : '#ef4444'
+          }}>{msg.text}</div>
+        )}
+
+        <button onClick={() => doCheckout()} disabled={loading}
+          className="w-full py-4 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+          style={{
+            background: 'linear-gradient(135deg, #00ff88, #00c4aa)',
+            color: '#040608',
+            boxShadow: '0 0 30px rgba(0,255,136,0.15)'
+          }}>
+          {loading ? 'Conectando con Stripe...' : <>💳 Pagar {amount}€ con tarjeta</>}
+        </button>
+
+        <div className="flex items-center gap-2 mt-4 text-xs text-zinc-600 justify-center">
+          <span>🔒 Pago seguro via Stripe</span>
+          <span>·</span>
+          <span>Aceptamos Visa, Mastercard, Bizum</span>
+        </div>
+      </Card>
+
+      <Card>
+        <SectionHeader icon={<Shield />} title="Por qué invertir" sub="Beneficios" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
+        <div className="space-y-3 text-sm text-zinc-400">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+            <span>Tu inversión impulsa la creación de música, apps y contenido</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+            <span>Ganancias compartidas: retira tu parte cuando quieras via PayPal</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+            <span>100% transparente: todo el movimiento se ve en el Dashboard</span>
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+}
+
 // APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
-type Tab = 'dashboard'|'youtube'|'amazon'|'withdraw'|'admin';
+type Tab = 'dashboard'|'youtube'|'amazon'|'withdraw'|'admin'|'invest';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id:'dashboard', label:'Dashboard', icon:<BarChart3 className="w-4 h-4"/> },
@@ -815,6 +936,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id:'amazon',    label:'Amazon',    icon:<ShoppingCart className="w-4 h-4"/> },
   { id:'withdraw',  label:'Retiros',   icon:<Repeat className="w-4 h-4"/> },
   { id:'admin',     label:'Admin',     icon:<Settings className="w-4 h-4"/> },
+  { id:'invest',    label:'Invertir',  icon:<DollarSign className="w-4 h-4"/> },
 ];
 
 export default function App() {
@@ -935,6 +1057,7 @@ export default function App() {
               {activeTab==='amazon'    && <AmazonTab />}
               {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast} />}
               {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast} />}
+              {activeTab==='invest'    && <InvestTab />}
             </motion.div>
           </AnimatePresence>
         )}
