@@ -820,46 +820,89 @@ function InvestTab() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{text:string;ok:boolean}|null>(null);
   const [showCustom, setShowCustom] = useState(false);
+  const [investMode, setInvestMode] = useState<'balance'|'card'>('balance');
+  const [balance, setBalance] = useState(0);
+
+  useEffect(() => {
+    fetch('/api/data').then(r => r.json()).then(d => setBalance(d.balance || 0)).catch(() => {});
+  }, []);
 
   const presets = [10, 25, 50, 100, 250, 500];
 
   const doCheckout = async (amt?: number) => {
     const a = amt || amount;
     if (a < 1) { setMsg({text:'El mínimo son 1€', ok:false}); return; }
-    setLoading(true);
-    setMsg(null);
+    setLoading(true); setMsg(null);
     try {
       const res = await fetch('/api/create-checkout', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          amount: a,
-          description: 'Inversión en InverGrow',
-          successUrl: window.location.origin + '?payment=success',
-          cancelUrl: window.location.origin + '?payment=cancel',
-        }),
+        body: JSON.stringify({ amount: a, description: 'Inversión en InverGrow', successUrl: window.location.origin + '?payment=success', cancelUrl: window.location.origin + '?payment=cancel' }),
       });
       const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
+      if (data.url) { window.location.href = data.url; }
+      else { setMsg({text:'Error al crear el pago: ' + (data.error || 'desconocido'), ok:false}); }
+    } catch (e: any) { setMsg({text:'Error de conexión: ' + e.message, ok:false}); }
+    finally { setLoading(false); }
+  };
+
+  const doInvestFromBalance = async (amt?: number) => {
+    const a = amt || amount;
+    if (a < 1) { setMsg({text:'El mínimo son 1€', ok:false}); return; }
+    if (a > balance) { setMsg({text:`Saldo insuficiente. Tienes EUR${balance.toFixed(2)}`, ok:false}); return; }
+    setLoading(true); setMsg(null);
+    try {
+      const res = await fetch('/api/invest-from-balance', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ amount: a }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMsg({text: data.message, ok: true});
+        setBalance(data.newBalance);
       } else {
-        setMsg({text:'Error al crear el pago: ' + (data.error || 'desconocido'), ok:false});
+        setMsg({text: data.error || 'Error al invertir', ok: false});
       }
-    } catch (e: any) {
-      setMsg({text:'Error de conexión: ' + e.message, ok:false});
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { setMsg({text:'Error de conexión: ' + e.message, ok:false}); }
+    finally { setLoading(false); }
   };
 
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
+      {/* Selector de modo */}
+      <div className="flex gap-2 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <button onClick={() => setInvestMode('balance')}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all"
+          style={{ background: investMode==='balance'?'rgba(0,255,136,0.15)':'transparent', color: investMode==='balance'?'#00ff88':'rgba(255,255,255,0.4)', border: investMode==='balance'?'1px solid rgba(0,255,136,0.3)':'none' }}>
+          <Wallet className="w-3.5 h-3.5"/> Desde mi saldo
+        </button>
+        <button onClick={() => setInvestMode('card')}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all"
+          style={{ background: investMode==='card'?'rgba(0,212,255,0.15)':'transparent', color: investMode==='card'?'#00d4ff':'rgba(255,255,255,0.4)', border: investMode==='card'?'1px solid rgba(0,212,255,0.3)':'none' }}>
+          <DollarSign className="w-3.5 h-3.5"/> Con tarjeta
+        </button>
+      </div>
+
       <Card>
-        <SectionHeader icon={<DollarSign />} title="Invertir en InverGrow" sub="Pago 100% seguro via Stripe" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+        <SectionHeader icon={<DollarSign />} title={investMode==='balance' ? 'Invertir desde mi saldo' : 'Invertir con tarjeta'}
+          sub={investMode==='balance' ? `Saldo disponible: EUR${balance.toFixed(2)}` : 'Pago seguro via Stripe'}
+          iconColor={investMode==='balance' ? '#00ff88' : '#00d4ff'} iconBg={investMode==='balance' ? 'rgba(0,255,136,0.1)' : 'rgba(0,212,255,0.1)'} />
         
+        {investMode === 'balance' && (
+          <div className="bg-zinc-800/50 rounded-xl p-3 mb-4 flex items-center gap-3">
+            <Wallet className="w-5 h-5 text-green-400" />
+            <div>
+              <p className="text-xs text-zinc-400">Tu saldo disponible</p>
+              <p className="text-lg font-bold text-green-400">EUR{balance.toFixed(2)}</p>
+            </div>
+          </div>
+        )}
+
         <p className="text-sm text-zinc-400 mt-4 mb-6">
-          Invierte y ayuda a crecer el ecosistema R3DMOON. Los fondos se usan para promoción, 
-          desarrollo de apps y contenido. Puedes retirar tus ganancias via PayPal cuando quieras.
+          {investMode === 'balance' 
+            ? 'Usa tu saldo acumulado (AdMob, afiliados, ingresos) para invertir y generar rentabilidad. El dinero pasa a "capital invertido" y empieza a rendir.'
+            : 'Invierte desde tu tarjeta para ayudar a crecer el ecosistema R3DMOON. Los fondos se usan para promoción, desarrollo de apps y contenido.'}
         </p>
 
         <div className="grid grid-cols-3 gap-3 mb-6">
@@ -895,21 +938,35 @@ function InvestTab() {
           }}>{msg.text}</div>
         )}
 
-        <button onClick={() => doCheckout()} disabled={loading}
-          className="w-full py-4 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
-          style={{
-            background: 'linear-gradient(135deg, #00ff88, #00c4aa)',
-            color: '#040608',
-            boxShadow: '0 0 30px rgba(0,255,136,0.15)'
-          }}>
-          {loading ? 'Conectando con Stripe...' : <>💳 Pagar {amount}€ con tarjeta</>}
-        </button>
+        {investMode === 'balance' ? (
+          <button onClick={() => doInvestFromBalance()} disabled={loading || balance <= 0}
+            className="w-full py-4 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+            style={{
+              background: 'linear-gradient(135deg, #00ff88, #00c4aa)',
+              color: '#040608',
+              boxShadow: '0 0 30px rgba(0,255,136,0.15)'
+            }}>
+            {loading ? 'Procesando...' : <>📈 Invertir {amount}€ desde mi saldo</>}
+          </button>
+        ) : (
+          <button onClick={() => doCheckout()} disabled={loading}
+            className="w-full py-4 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+            style={{
+              background: 'linear-gradient(135deg, #00ff88, #00c4aa)',
+              color: '#040608',
+              boxShadow: '0 0 30px rgba(0,255,136,0.15)'
+            }}>
+            {loading ? 'Conectando con Stripe...' : <>💳 Pagar {amount}€ con tarjeta</>}
+          </button>
+        )}
 
-        <div className="flex items-center gap-2 mt-4 text-xs text-zinc-600 justify-center">
-          <span>🔒 Pago seguro via Stripe</span>
-          <span>·</span>
-          <span>Aceptamos Visa, Mastercard, Bizum</span>
-        </div>
+        {investMode === 'card' && (
+          <div className="flex items-center gap-2 mt-4 text-xs text-zinc-600 justify-center">
+            <span>🔒 Pago seguro via Stripe</span>
+            <span>·</span>
+            <span>Aceptamos Visa, Mastercard, Bizum</span>
+          </div>
+        )}
       </Card>
 
       <Card>
