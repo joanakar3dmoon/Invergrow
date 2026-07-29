@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const timestamp = new Date().toISOString();
 
     const revenue = generateRevenue();
-    const splitPct = 70;
+    const splitPct = 50;
     const toInvest = parseFloat((revenue * splitPct / 100).toFixed(2));
     const toBalance = parseFloat((revenue * (100 - splitPct) / 100).toFixed(2));
 
