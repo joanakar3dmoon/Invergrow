@@ -193,15 +193,45 @@ export default function OwnerWithdrawPanel() {
             <select value={wMethod} onChange={e=>setWMethod(e.target.value)}
               className="w-full bg-zinc-800 text-white rounded-xl px-4 py-3 border border-zinc-700">
               <option value="paypal">PayPal</option>
+              <option value="bizum">Bizum</option>
+              <option value="revolut">Revolut</option>
+              <option value="tarjeta">Tarjeta de débito</option>
               <option value="bank">Transferencia bancaria</option>
               <option value="crypto">Cripto</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Destino</label>
+            <label className="text-xs text-zinc-500 mb-1 block">
+              {wMethod === 'bizum' ? 'Número de teléfono' :
+               wMethod === 'revolut' ? 'Email Revolut / alias' :
+               wMethod === 'tarjeta' ? 'Número de tarjeta' :
+               wMethod === 'crypto' ? 'Dirección de wallet' :
+               wMethod === 'bank' ? 'IBAN / datos bancarios' :
+               'Email PayPal'}
+            </label>
             <input type="text" value={wDest} onChange={e=>setWDest(e.target.value)}
+              placeholder={wMethod === 'bizum' ? '+34 6XX XXX XXX' :
+                wMethod === 'revolut' ? 'email@revolut.me' :
+                wMethod === 'tarjeta' ? 'XXXX XXXX XXXX XXXX' :
+                wMethod === 'crypto' ? '0x... / bc1...' :
+                wMethod === 'bank' ? 'ESXX XXXX XXXX XXXX XXXX XXXX' :
+                'Email de PayPal'}
               className="w-full bg-zinc-800 text-white rounded-xl px-4 py-3 border border-zinc-700 focus:outline-none focus:border-yellow-400" />
           </div>
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Notas (opcional)</label>
+            <input type="text" value={wNotes} onChange={e=>setWNotes(e.target.value)}
+              placeholder={wMethod === 'bizum' ? 'Nombre titular Bizum...' :
+                wMethod === 'revolut' ? 'Nombre del titular...' :
+                wMethod === 'tarjeta' ? 'Nombre en la tarjeta...' :
+                'Motivo del retiro...'}
+              className="w-full bg-zinc-800 text-white rounded-xl px-4 py-3 border border-zinc-700" />
+          </div>
+          {wMethod !== 'paypal' && (
+            <div className="text-xs text-zinc-500 bg-zinc-800 rounded-xl p-3 border border-yellow-400/20">
+              <span className="text-yellow-400">⚠️ Procesamiento manual:</span> los retiros por {wMethod === 'bizum' ? 'Bizum' : wMethod === 'revolut' ? 'Revolut' : wMethod === 'tarjeta' ? 'tarjeta de débito' : wMethod} se registran para ejecución manual por el administrador. El saldo se descuenta automáticamente.
+            </div>
+          )}
           <div>
             <label className="text-xs text-zinc-500 mb-1 block">Notas (opcional)</label>
             <input type="text" value={wNotes} onChange={e=>setWNotes(e.target.value)}
