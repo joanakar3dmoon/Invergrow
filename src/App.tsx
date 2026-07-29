@@ -175,6 +175,42 @@ function DashboardTab({ state }: { state: SystemState }) {
         <StatCard icon={<Zap />}          label="Ganancias Netas"    value={state.netGains}          sub="Histórico total"          color="#a855f7" />
       </div>
 
+      {/* Workers en acción */}
+      <Card>
+        <SectionHeader icon={<Sparkles />} title="🤖 Workers Activos" sub="Generando ingresos cada hora" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+        <div className="space-y-3">
+          {[0,1,2].map(i => {
+            const w = (state as any).aiWorkers?.[i];
+            if (!w) return null;
+            const txs = (state.transactions || []).filter((t: any) =>
+              t.type==='AI_REVENUE' && t.description?.includes(w.name)
+            );
+            const total = txs.reduce((s: number, t: any) => s + t.amount, 0);
+            const lastTx = txs[0];
+            return (
+              <div key={w.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: `${w.color||'#00ff88'}15`, border: `1px solid ${w.color||'#00ff88'}25` }}>
+                  {w.icon || '🤖'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-white">{w.name}</p>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88' }}>
+                      Lv.{w.level||1}
+                    </span>
+                  </div>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{w.role}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-black" style={{ color: '#00ff88' }}>+€{fmt(total)}</p>
+                  {lastTx && <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>{new Date(lastTx.date).toLocaleDateString('es-ES')}</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
       {/* Resumen de Ingresos Reales */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
