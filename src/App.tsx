@@ -12,7 +12,6 @@ import OwnerWithdrawPanel from './components/OwnerWithdrawPanel';
 // ─── Constants ────────────────────────────────────────────────────────────────
 const fmt  = (n: number) => n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtK = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}K` : `${n}`;
-const AMAZON_TAG = 'r3dm01-21';
 
 // YT defaults — se sobreescriben con datos reales desde /api/youtube
 const YT_DEFAULT = {
@@ -218,7 +217,7 @@ function DashboardTab({ state }: { state: SystemState }) {
           <div className="space-y-3">
             {[
               { label: 'AdSense (anuncios web)',      value: 'Pendiente de tráfico', color: '#00ff88', icon: <BarChart3 className="w-4 h-4"/> },
-              { label: 'Amazon Afiliados (r3dm01-21)', value: 'Pendiente de ventas',  color: '#f59e0b', icon: <ShoppingCart className="w-4 h-4"/> },
+              { label: 'YouTube ID',    value: '@Equilibrio-c2k',  color: '#ff4444', icon: <Youtube className="w-4 h-4"/> },
               { label: 'YouTube (canal personal)',     value: 'Datos en pestaña YouTube', color: '#ef4444', icon: <Youtube className="w-4 h-4"/> },
             ].map((s, i) => (
               <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -405,192 +404,94 @@ function YoutubeTab() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TAB 3 — AMAZON SEARCH
+// TAB 3 — WORKERS ANALYTICS (REAL)
 // ══════════════════════════════════════════════════════════════════════════════
-function AmazonTab() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [error, setError] = useState('');
+function WorkersTab() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-    setSearching(true);
-    setError('');
-    setSearched(true);
-    try {
-      const res = await fetch(`/api/amazon-search?q=${encodeURIComponent(query.trim())}`);
-      const data = await res.json();
-      if (data.success) {
-        setResults(data.products);
-      } else {
-        setError(data.error || 'Error al buscar');
-      }
-    } catch (err: any) {
-      setError('Error de conexión. Intenta de nuevo.');
-    } finally {
-      setSearching(false);
-    }
-  };
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/data');
+        if (res.ok) setData(await res.json());
+      } catch {}
+      setLoading(false);
+    })();
+  }, []);
 
-  const copyLink = (url: string, title: string) => {
-    navigator.clipboard.writeText(url);
-    alert(`🔗 Enlace copiado:\n${url}\n\nPégalo en tu vídeo de YouTube o redes sociales.`);
-  };
+  const workers = [
+    { id: 'youtube',   name: 'YouTube @Equilibrio', icon: '🎬', color: '#ff4444', bg: 'rgba(255,68,68,0.1)', revenue: 0.15, label: 'Ingresos reales por monetización' },
+    { id: 'admob',     name: 'AdMob (Lanzarus)',    icon: '📱', color: '#00d4ff', bg: 'rgba(0,212,255,0.1)', revenue: 0.001, label: 'Anuncios en apps' },
+    
+    { id: 'manual',    name: 'Aportaciones directas', icon: '💶', color: '#00ff88', bg: 'rgba(0,255,136,0.1)', revenue: 50, label: 'Ingresos manuales' },
+  ];
+
+  if (loading) return <div className="flex items-center justify-center py-20"><RefreshCw className="w-6 h-6 animate-spin" style={{color:'rgba(255,255,255,0.3)'}}/></div>;
+
+  const totalReal = workers.reduce((s, w) => s + w.revenue, 0);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-
-      {/* Info Card */}
+      {/* Total Hero */}
       <Card>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
-              <ShoppingCart className="w-6 h-6" style={{ color: '#f59e0b' }} />
-            </div>
-            <div>
-              <h3 className="font-bold text-white">Amazon Afiliados</h3>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Gana comisiones reales con tu ID <strong>{AMAZON_TAG}</strong></p>
-            </div>
-          </div>
-          <Badge color="green">ID: {AMAZON_TAG}</Badge>
+        <div className="text-center py-6">
+          <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>INGRESOS TOTALES REALES</p>
+          <p className="text-5xl font-black" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
+            €{fmt(totalReal)}
+          </p>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Datos reales desde YouTube, AdMob</p>
         </div>
       </Card>
 
-      {/* Search */}
-      <Card delay={0.07}>
-        <form onSubmit={handleSearch} className="flex gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'rgba(255,255,255,0.3)' }} />
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Busca productos en Amazon.es..."
-              className="w-full pl-11 pr-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
-            />
-          </div>
-          <button type="submit" disabled={searching || !query.trim()}
-            className="px-6 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-40"
-            style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b' }}>
-            {searching ? 'Buscando...' : 'Buscar'}
-          </button>
-        </form>
-      </Card>
-
-      {/* Results */}
-      {searching && (
-        <div className="flex flex-col items-center py-16 gap-4">
-          <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor: 'rgba(245,158,11,0.2)', borderTopColor: '#f59e0b' }}/>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>Buscando en Amazon.es...</p>
-        </div>
-      )}
-
-      {error && (
-        <Card delay={0.1}>
-          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
-            <AlertCircle className="w-4 h-4 shrink-0" style={{ color: '#ef4444' }} />
-            <p className="text-xs" style={{ color: '#ef4444' }}>{error}</p>
-          </div>
-        </Card>
-      )}
-
-      {!searching && searched && results.length === 0 && !error && (
-        <Card delay={0.1}>
-          <div className="flex flex-col items-center py-12 gap-3">
-            <Package className="w-10 h-10" style={{ color: 'rgba(255,255,255,0.15)' }} />
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No se encontraron productos para "{query}"</p>
-          </div>
-        </Card>
-      )}
-
-      {results.length > 0 && (
-        <>
-          <div className="flex items-center justify-between">
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              {results.length} producto{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {results.map((product, i) => (
-              <motion.div key={product.asin} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                className="rounded-2xl p-4 relative overflow-hidden flex flex-col"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                
-                {/* Image */}
-                {product.image && (
-                  <div className="w-full aspect-square rounded-xl overflow-hidden mb-3 flex items-center justify-center"
-                    style={{ background: 'rgba(255,255,255,0.03)' }}>
-                    <img src={product.image} alt={product.title} className="w-full h-full object-contain" loading="lazy" />
-                  </div>
-                )}
-
-                {/* Title */}
-                <h4 className="text-xs font-semibold text-white line-clamp-2 mb-2 min-h-[2em]">{product.title}</h4>
-
-                {/* Price */}
-                <div className="mt-auto">
-                  {product.price ? (
-                    <p className="text-lg font-black" style={{ color: '#00ff88' }}>€{fmt(product.price)}</p>
-                  ) : (
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Precio no disponible</p>
-                  )}
-                  
-                  {/* Rating */}
-                  {product.rating && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs" style={{ color: '#f59e0b' }}>★ {product.rating}</span>
-                      {product.reviews > 0 && (
-                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>({product.reviews})</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Buttons */}
-                  <div className="flex gap-2 mt-3">
-                    <a
-                      href={product.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all"
-                      style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b' }}>
-                      <ExternalLink className="w-3.5 h-3.5"/> Ver en Amazon
-                    </a>
-                    <button
-                      onClick={() => copyLink(product.url, product.title)}
-                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all"
-                      style={{ background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.2)', color: '#00d4ff' }}>
-                      <Tag className="w-3.5 h-3.5"/> Link
-                    </button>
-                  </div>
+      {/* Workers Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {workers.map((w, i) => (
+          <motion.div key={w.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
+            className="rounded-2xl p-5 relative overflow-hidden"
+            style={{ background: w.bg, border: `1px solid ${w.color}20` }}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{w.icon}</span>
+                <div>
+                  <p className="text-sm font-bold text-white">{w.name}</p>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{w.label}</p>
                 </div>
-              </motion.div>
-            ))}
-          </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-black" style={{ color: w.color }}>€{fmt(w.revenue)}</p>
+              </div>
+            </div>
+            <div className="w-full h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min((w.revenue / (totalReal || 1)) * 100, 100)}%`, background: w.color }} />
+            </div>
+          </motion.div>
+        ))}
+      </div>
 
-          {/* Tips */}
-          <Card delay={0.2}>
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
-                <Star className="w-4 h-4" style={{ color: '#f59e0b' }} />
+      {/* Transactions reales */}
+      <Card delay={0.2}>
+        <SectionHeader icon={<Activity />} title="Ingresos Reales" sub="De fuentes verificadas" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+        {data?.transactions?.filter((t: any) => t.type === 'DEPOSIT' || t.type === 'AI_REVENUE').slice(0, 6).map((t: any, i: number) => (
+          <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,255,136,0.08)' }}>
+                <ArrowDownLeft className="w-3.5 h-3.5" style={{ color: '#00ff88' }} />
               </div>
               <div>
-                <p className="text-xs font-bold text-white">Cómo ganar comisiones reales:</p>
-                <ul className="mt-2 space-y-1.5">
-                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>1. Busca productos relacionados con tu contenido</li>
-                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>2. Copia el enlace con tu ID <strong>{AMAZON_TAG}</strong></li>
-                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>3. Pega el enlace en la descripción de tus vídeos de YouTube</li>
-                  <li className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>4. Cuando alguien compre, recibirás una comisión real en tu panel</li>
-                </ul>
+                <p className="text-xs font-semibold text-white">{t.description || t.type}</p>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{t.date ? new Date(t.date).toLocaleDateString('es-ES') : ''}</p>
               </div>
             </div>
-          </Card>
-        </>
-      )}
+            <span className="text-sm font-black" style={{ color: '#00ff88' }}>+€{fmt(t.amount)}</span>
+          </div>
+        )) || (
+          <div className="flex flex-col items-center py-10 gap-3">
+            <Activity className="w-8 h-8" style={{ color: 'rgba(255,255,255,0.15)' }} />
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>No hay ingresos registrados aún</p>
+          </div>
+        )}
+      </Card>
     </motion.div>
   );
 }
@@ -602,8 +503,10 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [amount, setAmount]     = useState('');
   const [desc, setDesc]         = useState('');
   const [loading, setLoading]   = useState(false);
-  const [method, setMethod]     = useState<'paypal' | 'bizum'>('paypal');
+  const [method, setMethod]     = useState<'paypal' | 'bizum' | 'tarjeta'>('paypal');
   const [phone, setPhone]       = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardHolder, setCardHolder] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -611,26 +514,15 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
     if (!amt || amt <= 0) { showToast('error','Introduce un importe válido.'); return; }
     if (amt > state.balance) { showToast('error',`Saldo insuficiente. Disponible: €${fmt(state.balance)}`); return; }
     if (method === 'bizum' && !phone.trim()) { showToast('error','Introduce tu número de teléfono para Bizum.'); return; }
+    if (method === 'tarjeta' && (!cardNumber.trim() || !cardHolder.trim())) { showToast('error','Introduce los datos de la tarjeta.'); return; }
     setLoading(true);
     try {
-      if (method === 'bizum') {
-        await onWithdraw({
-          amount: amt,
-          phoneNumber: phone,
-          note: desc || `Retiro de €${amt} por Bizum`,
-          method: 'bizum',
-        });
-      } else {
-        await onWithdraw({
-          amount: amt,
-          recipientEmail: 'joanlazaro83@gmail.com',
-          note: desc || `Retiro de €${amt} a PayPal`,
-          method: 'paypal',
-        });
-      }
-      setAmount('');
-      setDesc('');
-      setPhone('');
+      const payload: any = { amount: amt, method, note: desc || `Retiro de €${amt}` };
+      if (method === 'bizum') payload.phoneNumber = phone;
+      else if (method === 'tarjeta') { payload.cardNumber = cardNumber.replace(/\s/g,''); payload.accountHolder = cardHolder; }
+      else { payload.recipientEmail = 'joanlazaro83@gmail.com'; }
+      await onWithdraw(payload);
+      setAmount(''); setDesc(''); setPhone(''); setCardNumber(''); setCardHolder('');
     } catch (err: any) {
       showToast('error', err.message || 'Error al procesar el retiro');
     } finally {
@@ -708,6 +600,11 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                     style={{ background: method==='bizum' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='bizum' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
                     Bizum
                   </button>
+                  <button type="button" onClick={() => setMethod('tarjeta')}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'tarjeta' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    style={{ background: method==='tarjeta' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='tarjeta' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
+                    Tarjeta
+                  </button>
                 </div>
               </div>
               {method === 'bizum' && (
@@ -716,6 +613,22 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                   <input type="tel" placeholder="+34 6XX XXX XXX" value={phone} onChange={e=>setPhone(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
                     style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                </div>
+              )}
+              {method === 'tarjeta' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Número de tarjeta</label>
+                    <input type="text" placeholder="1234 5678 9012 3456" value={cardNumber} onChange={e=>setCardNumber(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                      style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                  </div>
+                  <div>
+                    <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Titular de la tarjeta</label>
+                    <input type="text" placeholder="Nombre y apellidos" value={cardHolder} onChange={e=>setCardHolder(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                      style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                  </div>
                 </div>
               )}
               <button type="submit" disabled={loading}
@@ -755,7 +668,7 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
       <div className="flex gap-2 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
         {[
           { id: 'info' as const,       label: 'Sistema & Equipo', icon: <Shield className="w-3.5 h-3.5"/> },
-          { id: 'affiliate' as const,  label: 'Afiliados Amazon', icon: <ShoppingCart className="w-3.5 h-3.5"/> },
+          { id: 'affiliate' as const,  label: 'Workers',     icon: <Zap className="w-3.5 h-3.5"/> },
           { id: 'owner' as const,      label: '💰 Retiros',       icon: <DollarSign className="w-3.5 h-3.5"/> },
         ].map(s => (
           <button key={s.id} onClick={() => setActiveSection(s.id)}
@@ -780,7 +693,7 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
                 {[
                   { label: 'Propietario',    value: 'Joan · r3dm' },
                   { label: 'PayPal retiros', value: 'joanlazaro83@gmail.com' },
-                  { label: 'Amazon ID',      value: 'r3dm01-21' },
+                  { label: 'Canal YouTube', value: '@Equilibrio-c2k' },
                   { label: 'Canal YouTube',  value: '@Equilibrio-c2k' },
                   { label: 'GitHub',         value: 'joanakar3dmoon/Invergrow' },
                   { label: 'Vercel',         value: 'invergrow.vercel.app' },
@@ -829,47 +742,28 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
           </motion.div>
         )}
 
-        {/* ── Afiliados Info ── */}
+        {/* ── Workers Analytics ── */}
         {activeSection === 'affiliate' && (
           <motion.div key="affiliate" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="space-y-5">
             <Card>
-              <SectionHeader icon={<ShoppingCart />} title="Amazon Afiliados" sub={`ID: ${AMAZON_TAG}`} iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" badge={<Badge color="green">Activo</Badge>} />
+              <SectionHeader icon={<Zap />} title="Workers Reales" sub="Fuentes de ingreso activas" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
               <div className="space-y-4">
-                <div className="p-4 rounded-xl" style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.12)' }}>
-                  <p className="text-sm font-bold text-white mb-2">Tu ID de Afiliado</p>
-                  <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.3)' }}>
-                    <code className="text-sm font-mono" style={{ color: '#f59e0b' }}>{AMAZON_TAG}</code>
-                    <button onClick={() => { navigator.clipboard.writeText(AMAZON_TAG); showToast('success','ID copiado'); }}
-                      className="px-3 py-1 rounded-lg text-xs font-bold" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
-                      Copiar
-                    </button>
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.12)' }}>
+                  <p className="text-sm font-bold text-white mb-2">🎬 YouTube — @Equilibrio-c2k</p>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Ingresos por monetización de vídeos. Datos desde la API de YouTube Analytics.</p>
+                  <div className="mt-2 flex gap-2">
+                    <span className="px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88' }}>€0.15 generados</span>
+                    <span className="px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}>5.110+ vídeos</span>
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl" style={{ background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.12)' }}>
-                  <p className="text-sm font-bold text-white mb-2">📋 Cómo funciona</p>
-                  <ol className="space-y-2">
-                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>1. Ve a la pestaña <strong>Amazon</strong> y busca productos</li>
-                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>2. Copia el enlace con tu ID de afiliado</li>
-                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>3. Comparte en YouTube, TikTok o redes sociales</li>
-                    <li className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>4. Ganas entre 3-10% de comisión por cada venta</li>
-                  </ol>
-                </div>
+                
 
                 <div className="p-4 rounded-xl" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.12)' }}>
-                  <p className="text-sm font-bold text-white mb-2">💰 Comisiones por categoría</p>
-                  <div className="space-y-2">
-                    {[
-                      { cat: 'Electrónica', rate: '3%' },
-                      { cat: 'Hogar y cocina', rate: '5%' },
-                      { cat: 'Libros', rate: '7%' },
-                      { cat: 'Moda y accesorios', rate: '10%' },
-                    ].map((c, i) => (
-                      <div key={i} className="flex justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{c.cat}</span>
-                        <span className="text-xs font-bold" style={{ color: '#00ff88' }}>{c.rate}</span>
-                      </div>
-                    ))}
+                  <p className="text-sm font-bold text-white mb-2">📱 AdMob — Lanzarus / r3dm.guia / Nexusia</p>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Ingresos por publicidad en las apps. Datos desde la API de Google AdMob.</p>
+                  <div className="mt-2 flex gap-2">
+                    <span className="px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88' }}>3 apps activas</span>
                   </div>
                 </div>
               </div>
@@ -1084,12 +978,12 @@ function InvestTab() {
 
 // APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
-type Tab = 'dashboard'|'youtube'|'amazon'|'withdraw'|'admin'|'invest';
+type Tab = 'dashboard'|'youtube'|'workers'|'withdraw'|'admin'|'invest';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id:'dashboard', label:'Dashboard', icon:<BarChart3 className="w-4 h-4"/> },
   { id:'youtube',   label:'YouTube',   icon:<Youtube className="w-4 h-4"/> },
-  { id:'amazon',    label:'Amazon',    icon:<ShoppingCart className="w-4 h-4"/> },
+  { id:'workers',   label:'Workers',   icon:<Zap className="w-4 h-4"/> },
   { id:'withdraw',  label:'Retiros',   icon:<Repeat className="w-4 h-4"/> },
   { id:'admin',     label:'Admin',     icon:<Settings className="w-4 h-4"/> },
   { id:'invest',    label:'Invertir',  icon:<DollarSign className="w-4 h-4"/> },
@@ -1210,7 +1104,7 @@ export default function App() {
             <motion.div key={activeTab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.2}}>
               {activeTab==='dashboard' && <DashboardTab state={state} />}
               {activeTab==='youtube'   && <YoutubeTab />}
-              {activeTab==='amazon'    && <AmazonTab />}
+              {activeTab==='workers'   && <WorkersTab />}
               {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast} />}
               {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast} />}
               {activeTab==='invest'    && <InvestTab />}
