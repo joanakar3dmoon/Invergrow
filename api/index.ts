@@ -156,11 +156,10 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
     const state = await getState();
     const available = parseFloat((state.balance || 0).toFixed(2));
     if (amt > available) return res.status(400).json({ error: `Saldo insuficiente. Disponible: €${available.toFixed(2)}`, available });
-    const newBalance = parseFloat((available - amt).toFixed(2));
-    const newWithdrawals = parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2));
     const ref = `WD-${Date.now()}`;
     let txStatus = 'COMPLETED';
     let txDesc = description || `Retiro ${method}`;
+    let deductBalance = true; // solo falso si PayPal falla
 
     if (method === 'paypal') {
       const email = paypalEmail || 'joanlazaro83@gmail.com';
@@ -171,8 +170,9 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
           txDesc = `PayPal Payout enviado a ${email} — Batch: ${batchId}`;
           txStatus = 'COMPLETED';
         } catch (ppErr: any) {
-          txDesc = `PayPal error: ${ppErr.message}. Retiro registrado como pendiente.`;
-          txStatus = 'PENDING';
+          txDesc = `PayPal error: ${ppErr.message}. El saldo NO se ha descontado. Puedes reintentarlo.`;
+          txStatus = 'FAILED';
+          deductBalance = false;
         }
       } else {
         txDesc = `Retiro PayPal de €${amt.toFixed(2)} a ${email} — pendiente (falta config PayPal)`;
@@ -203,7 +203,11 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       txStatus = 'PENDING';
     }
 
-    await patchState({ balance: newBalance, total_withdrawals: newWithdrawals });
+    if (deductBalance) {
+      const newBalance = parseFloat((available - amt).toFixed(2));
+      const newWithdrawals = parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2));
+      await patchState({ balance: newBalance, total_withdrawals: newWithdrawals });
+    }
     await supa('invergrow_transactions', {
       method: 'POST',
       body: JSON.stringify({
