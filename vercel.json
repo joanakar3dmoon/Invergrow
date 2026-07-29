@@ -6,6 +6,10 @@
       "dest": "/api/ai/generate"
     },
     {
+      "src": "/api/amazon-search",
+      "dest": "/api/amazon-search"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/index"
     },
