@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SystemState } from './types';
+import OwnerWithdrawPanel from './components/OwnerWithdrawPanel';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const fmt  = (n: number) => n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -645,7 +646,7 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
   const [name, setName]   = useState('');
   const [role, setRole]   = useState('');
   const [wage, setWage]   = useState('');
-  const [activeSection, setActiveSection] = useState<'info'|'affiliate'>('info');
+  const [activeSection, setActiveSection] = useState<'info'|'affiliate'|'owner'>('info');
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -663,6 +664,7 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
         {[
           { id: 'info' as const,       label: 'Sistema & Equipo', icon: <Shield className="w-3.5 h-3.5"/> },
           { id: 'affiliate' as const,  label: 'Afiliados Amazon', icon: <ShoppingCart className="w-3.5 h-3.5"/> },
+          { id: 'owner' as const,      label: '💰 Retiros',       icon: <DollarSign className="w-3.5 h-3.5"/> },
         ].map(s => (
           <button key={s.id} onClick={() => setActiveSection(s.id)}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all"
@@ -780,6 +782,11 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
                 </div>
               </div>
             </Card>
+          </motion.div>
+        )}
+        {activeSection === 'owner' && (
+          <motion.div key="owner" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}}>
+            <OwnerWithdrawPanel />
           </motion.div>
         )}
       </AnimatePresence>
