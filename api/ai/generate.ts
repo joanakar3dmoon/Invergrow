@@ -27,7 +27,7 @@ async function getState(): Promise<any> {
 
 async function callGemini(prompt: string): Promise<string> {
   const res = await fetch(
-    \`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=\${GEMINI_API_KEY}\`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let usedGemini = false;
     if (GEMINI_API_KEY && GEMINI_API_KEY.length > 10) {
       usedGemini = true;
-      const prompt = \`Genera un breve análisis de mercado (2-3 líneas) en español sobre tendencias de inversión, ingresos pasivos o oportunidades digitales. Responde solo el análisis, sin introducción.\`;
+      const prompt = `Genera un breve análisis de mercado (2-3 líneas) en español sobre tendencias de inversión, ingresos pasivos o oportunidades digitales. Responde solo el análisis, sin introducción.`;
       analysis = await callGemini(prompt);
     }
 
@@ -96,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         type: 'AI_REVENUE',
         status: 'COMPLETED',
         amount: revenue,
-        description: \`\${workerLabel}: EUR\${revenue.toFixed(2)} generados (\${splitPct}% invertido, \${100-splitPct}% disponible)\`,
+        description: `${workerLabel}: EUR${revenue.toFixed(2)} generados (${splitPct}% invertido, ${100-splitPct}% disponible)`,
         reference: ref,
         gateway: 'AI_ENGINE',
       }),
@@ -126,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       usedGemini,
       worker: workerLabel,
       reference: ref,
-      note: \`EUR\${revenue.toFixed(2)} generados — \${toInvest.toFixed(2)}€ invertidos, \${toBalance.toFixed(2)}€ disponibles\`,
+      note: `EUR${revenue.toFixed(2)} generados — ${toInvest.toFixed(2)}€ invertidos, ${toBalance.toFixed(2)}€ disponibles`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
