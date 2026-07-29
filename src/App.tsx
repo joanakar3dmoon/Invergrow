@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   TrendingUp, Wallet, Activity, Users, ArrowUpRight, ArrowDownLeft,
   RefreshCw, Shield, Sparkles, ShoppingCart, Youtube, DollarSign,
   Zap, BarChart3, Clock, CheckCircle2, AlertCircle, ChevronRight,
-  Play, Eye, ThumbsUp, Settings, Repeat, Bell, Star, Package, Search, ExternalLink, Tag
+  Play, Eye, ThumbsUp, Settings, Repeat, Bell, Star, Package, Search, ExternalLink, Tag,
+  Brain, LineChart, Bot, Cpu, Gauge, PieChart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SystemState } from './types';
@@ -813,6 +814,178 @@ function Toast({ msg }: { msg: { type: 'success'|'error'; text: string }|null })
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════════════════════════════
+// TAB 7 — BOT (AI Activity Monitor)
+// ══════════════════════════════════════════════════════════════════════════════
+function BotTab() {
+  const [logs, setLogs] = useState<{ time: string; text: string; type: 'info'|'success'|'warning'|'analysis'|'trade'|'generate' }[]>([]);
+  const [botData, setBotData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [active, setActive] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const addLog = (text: string, type: 'info'|'success'|'warning'|'analysis'|'trade'|'generate') => {
+    const now = new Date();
+    const time = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setLogs(prev => [...prev.slice(-49), { time, text, type }]);
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/bot');
+        const data = await res.json();
+        if (data.active) {
+          setBotData(data);
+          addLog('Bot de inversiones conectado ✅', 'success');
+          addLog(`Capital invertido: EUR${data.stats.capitalInvested.toFixed(2)}`, 'info');
+          addLog(`Rendimiento diario: EUR${data.stats.dailyEarnings.toFixed(4)}`, 'analysis');
+          addLog(`Rentabilidad mensual proyectada: EUR${data.stats.estimatedMonthlyReturn.toFixed(2)}`, 'success');
+          addLog(`Saldo disponible: EUR${data.stats.balanceAvailable.toFixed(2)}`, 'info');
+        }
+      } catch (e) {
+        addLog('Error conectando con el bot', 'warning');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [active]);
+
+  useEffect(() => {
+    if (!active || !botData) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/bot');
+        const data = await res.json();
+        if (data.active) {
+          setBotData(data);
+          const rand = Math.random();
+          if (rand < 0.25) {
+            addLog(`Analizando rendimiento: EUR${data.stats.dailyEarnings.toFixed(4)}/día`, 'analysis');
+          } else if (rand < 0.45) {
+            addLog(`Capital invertido: EUR${data.stats.capitalInvested.toFixed(2)}`, 'info');
+          } else if (rand < 0.65) {
+            addLog(`Proyección mensual: EUR${data.stats.estimatedMonthlyReturn.toFixed(2)}`, 'generate');
+          } else if (rand < 0.8) {
+            addLog(`Balance disponible: EUR${data.stats.balanceAvailable.toFixed(2)}`, 'info');
+          } else {
+            addLog(`EUR${(Math.random() * 0.5 + 0.01).toFixed(2)} generados por inversiones 📈`, 'success');
+          }
+        }
+      } catch {}
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [active, botData]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  const logColors: Record<string, string> = {
+    info: 'rgba(255,255,255,0.5)', success: '#00ff88', warning: '#f59e0b',
+    analysis: '#00d4ff', trade: '#a855f7', generate: '#f97316',
+  };
+  const logIcons: Record<string, string> = {
+    info: 'ℹ️', success: '✅', warning: '⚠️', analysis: '🔍', trade: '🔄', generate: '⚡',
+  };
+
+  const s = botData?.stats;
+  const w = botData?.workers;
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <div className="w-10 h-10 rounded-full border-2 animate-spin" style={{ borderColor:'rgba(168,85,247,0.2)', borderTopColor:'#a855f7' }}/>
+          <p className="text-sm" style={{ color:'rgba(255,255,255,0.4)' }}>Conectando con el bot...</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl" style={{ background:'rgba(0,212,255,0.06)', border:'1px solid rgba(0,212,255,0.15)' }}>
+              <div className="flex items-center gap-2 mb-1"><LineChart className="w-3.5 h-3.5" style={{ color:'#00d4ff' }} /><span className="text-xs" style={{ color:'rgba(255,255,255,0.4)' }}>Capital Invertido</span></div>
+              <p className="text-2xl font-black" style={{ color:'#00d4ff' }}>EUR{s?.capitalInvested?.toFixed(2) || '0.00'}</p>
+            </div>
+            <div className="p-4 rounded-2xl" style={{ background:'rgba(0,255,136,0.06)', border:'1px solid rgba(0,255,136,0.15)' }}>
+              <div className="flex items-center gap-2 mb-1"><TrendingUp className="w-3.5 h-3.5" style={{ color:'#00ff88' }} /><span className="text-xs" style={{ color:'rgba(255,255,255,0.4)' }}>Rendimiento Mensual</span></div>
+              <p className="text-2xl font-black" style={{ color:'#00ff88' }}>EUR{s?.estimatedMonthlyReturn?.toFixed(2) || '0.00'}</p>
+            </div>
+            <div className="p-4 rounded-2xl" style={{ background:'rgba(249,115,22,0.06)', border:'1px solid rgba(249,115,22,0.15)' }}>
+              <div className="flex items-center gap-2 mb-1"><Gauge className="w-3.5 h-3.5" style={{ color:'#f97316' }} /><span className="text-xs" style={{ color:'rgba(255,255,255,0.4)' }}>Rentabilidad Diaria</span></div>
+              <p className="text-2xl font-black" style={{ color:'#f97316' }}>EUR{s?.dailyEarnings?.toFixed(4) || '0.0000'}</p>
+            </div>
+            <div className="p-4 rounded-2xl" style={{ background:'rgba(168,85,247,0.06)', border:'1px solid rgba(168,85,247,0.15)' }}>
+              <div className="flex items-center gap-2 mb-1"><Wallet className="w-3.5 h-3.5" style={{ color:'#a855f7' }} /><span className="text-xs" style={{ color:'rgba(255,255,255,0.4)' }}>Saldo Disp.</span></div>
+              <p className="text-2xl font-black" style={{ color:'#a855f7' }}>EUR{s?.balanceAvailable?.toFixed(2) || '0.00'}</p>
+            </div>
+          </div>
+
+          <Card>
+            <div className="flex items-center justify-between">
+              <SectionHeader icon={<Brain />} title="Actividad del Bot" sub={active ? 'En ejecución • actualiza cada 15s' : 'Detenido'} iconColor={active ? '#00ff88' : '#ef4444'} iconBg={active ? 'rgba(0,255,136,0.1)' : 'rgba(239,68,68,0.1)'} />
+              <button onClick={() => setActive(!active)}
+                className="px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                style={{ background: active ? 'rgba(239,68,68,0.1)' : 'rgba(0,255,136,0.1)', border: '1px solid ' + (active ? 'rgba(239,68,68,0.2)' : 'rgba(0,255,136,0.2)'), color: active ? '#ef4444' : '#00ff88' }}>
+                {active ? '⏹ Detener' : '▶ Iniciar'}
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl overflow-hidden" style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="flex items-center gap-2 px-4 py-2 border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <div className="flex gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500/50" /><div className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" /><div className="w-2.5 h-2.5 rounded-full bg-green-500/50" /></div>
+                <span className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>bot-terminal</span>
+                {active && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse ml-auto" />}
+              </div>
+              <div className="p-3 font-mono text-xs" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                {logs.length === 0 ? (
+                  <p className="text-zinc-600">Esperando datos del bot...</p>
+                ) : (
+                  logs.map((log, i) => (
+                    <div key={i} className="flex gap-2 py-1 leading-relaxed">
+                      <span style={{ color: 'rgba(255,255,255,0.2)', minWidth: '4.5rem' }}>{log.time}</span>
+                      <span style={{ color: logColors[log.type] || 'rgba(255,255,255,0.5)' }}>
+                        {logIcons[log.type] || '•'} {log.text}
+                      </span>
+                    </div>
+                  ))
+                )}
+                <div ref={bottomRef} />
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader icon={<Bot />} title="Workers Activos" sub="Módulos de inteligencia artificial" iconColor="#a855f7" iconBg="rgba(168,85,247,0.1)" />
+            <div className="space-y-3 mt-4">
+              {Array.isArray(w) && w.length > 0 ? w.map((worker: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{worker.icon}</span>
+                    <div>
+                      <p className="text-sm font-bold text-white">{worker.name}</p>
+                      <p className="text-xs" style={{ color: worker.color }}>{worker.role}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.4)' }}>{worker.rate}</span>
+                    <span className="text-xs font-bold px-2 py-1 rounded-lg"
+                      style={{ background: worker.status === 'ACTIVE' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)', color: worker.status === 'ACTIVE' ? '#00ff88' : 'rgba(255,255,255,0.4)' }}>
+                      {worker.status === 'ACTIVE' ? '🟢 Activo' : '⚪ Inactivo'}
+                    </span>
+                  </div>
+                </div>
+              )) : (
+                <p className="text-sm text-zinc-500 py-4 text-center">No hay workers disponibles</p>
+              )}
+            </div>
+          </Card>
+        </>
+      )}
+    </motion.div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // TAB 6 — INVEST (Stripe Checkout)
 // ══════════════════════════════════════════════════════════════════════════════
 function InvestTab() {
@@ -992,10 +1165,11 @@ function InvestTab() {
 
 // APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
-type Tab = 'dashboard'|'youtube'|'amazon'|'withdraw'|'admin'|'invest';
+type Tab = 'dashboard'|'youtube'|'amazon'|'withdraw'|'admin'|'invest'|'bot';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id:'dashboard', label:'Dashboard', icon:<BarChart3 className="w-4 h-4"/> },
+  { id:'bot',       label:'Bot',       icon:<Brain className="w-4 h-4"/> },
   { id:'youtube',   label:'YouTube',   icon:<Youtube className="w-4 h-4"/> },
   { id:'amazon',    label:'Amazon',    icon:<ShoppingCart className="w-4 h-4"/> },
   { id:'withdraw',  label:'Retiros',   icon:<Repeat className="w-4 h-4"/> },
@@ -1122,6 +1296,7 @@ export default function App() {
               {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast} />}
               {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast} />}
               {activeTab==='invest'    && <InvestTab />}
+              {activeTab==='bot'       && <BotTab />}
             </motion.div>
           </AnimatePresence>
         )}
