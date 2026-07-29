@@ -1,23 +1,60 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/index.ts": { "maxDuration": 30 },
-    "api/amazon-search.ts": { "maxDuration": 30 }
-  },
-  "rewrites": [
-    { "source": "/api/amazon-search",    "destination": "/api/amazon-search.ts" },
-    { "source": "/api/data",             "destination": "/api/index.ts" },
-    { "source": "/api/withdraw",         "destination": "/api/index.ts" },
-    { "source": "/api/income",           "destination": "/api/index.ts" },
-    { "source": "/api/reinvest",         "destination": "/api/index.ts" },
-    { "source": "/api/youtube",          "destination": "/api/index.ts" },
-    { "source": "/api/youtube-callback", "destination": "/api/index.ts" },
-    { "source": "/api/admob",            "destination": "/api/index.ts" },
-    { "source": "/api/sync",             "destination": "/api/index.ts" },
-    { "source": "/api/webhook",          "destination": "/api/index.ts" },
-    { "source": "/api/:path*",           "destination": "/api/index.ts" },
-    { "source": "/((?!api/).*)",         "destination": "/index.html" }
+  "routes": [
+    {
+      "src": "/api/generate",
+      "dest": "/api/generate.js"
+    },
+    {
+      "src": "/api/data",
+      "dest": "/api/data.js"
+    },
+    {
+      "src": "/api/chat",
+      "dest": "/api/chat.js"
+    },
+    {
+      "src": "/api/reinvest",
+      "dest": "/api/reinvest.js"
+    },
+    {
+      "src": "/api/income",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/api/withdraw",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/api/",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/api/ai/generate",
+      "dest": "/api/ai/generate.js"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/manifest.json",
+      "dest": "/manifest.json"
+    },
+    {
+      "src": "/sw.js",
+      "dest": "/sw.js",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
+      "src": "/icons/(.*)",
+      "dest": "/icons/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
