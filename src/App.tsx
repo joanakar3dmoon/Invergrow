@@ -602,22 +602,35 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [amount, setAmount]     = useState('');
   const [desc, setDesc]         = useState('');
   const [loading, setLoading]   = useState(false);
+  const [method, setMethod]     = useState<'paypal' | 'bizum'>('paypal');
+  const [phone, setPhone]       = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { showToast('error','Introduce un importe válido.'); return; }
     if (amt > state.balance) { showToast('error',`Saldo insuficiente. Disponible: €${fmt(state.balance)}`); return; }
+    if (method === 'bizum' && !phone.trim()) { showToast('error','Introduce tu número de teléfono para Bizum.'); return; }
     setLoading(true);
     try {
-      await onWithdraw({
-        amount: amt,
-        recipientEmail: 'joanlazaro83@gmail.com',
-        note: desc || `Retiro de €${amt} a PayPal`,
-        method: 'paypal',
-      });
+      if (method === 'bizum') {
+        await onWithdraw({
+          amount: amt,
+          phoneNumber: phone,
+          note: desc || `Retiro de €${amt} por Bizum`,
+          method: 'bizum',
+        });
+      } else {
+        await onWithdraw({
+          amount: amt,
+          recipientEmail: 'joanlazaro83@gmail.com',
+          note: desc || `Retiro de €${amt} a PayPal`,
+          method: 'paypal',
+        });
+      }
       setAmount('');
       setDesc('');
+      setPhone('');
     } catch (err: any) {
       showToast('error', err.message || 'Error al procesar el retiro');
     } finally {
@@ -632,7 +645,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
         <div className="lg:col-span-5 space-y-5">
           <Card>
             <div className="text-center py-6">
-              <SectionHeader icon={<Wallet />} title="Saldo Disponible" sub="Retirable a PayPal" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+              <SectionHeader icon={<Wallet />} title="Saldo Disponible" sub="Retirable" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
               <p className="text-5xl font-black mt-4" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
                 €{fmt(state.balance)}
               </p>
@@ -645,9 +658,11 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
             <div className="flex items-start gap-3">
               <Shield className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#00d4ff' }} />
               <div>
-                <p className="text-xs font-bold text-white">Retiros por PayPal</p>
+                <p className="text-xs font-bold text-white">Retiros por {method === 'bizum' ? 'Bizum' : 'PayPal'}</p>
                 <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                  Los retiros se procesan a tu cuenta de PayPal vinculada. El dinero solo se envía cuando hay ingresos reales generados por comisiones de afiliados, AdSense o YouTube.
+                  {method === 'bizum'
+                    ? 'Los retiros por Bizum se registran para procesamiento manual. Te llegará la notificación al móvil.'
+                    : 'Los retiros se procesan a tu cuenta de PayPal vinculada.'}
                 </p>
               </div>
             </div>
@@ -680,10 +695,33 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                   className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
                   style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
               </div>
+              <div>
+                <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Método de retiro</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setMethod('paypal')}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'paypal' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    style={{ background: method==='paypal' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='paypal' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
+                    PayPal
+                  </button>
+                  <button type="button" onClick={() => setMethod('bizum')}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'bizum' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    style={{ background: method==='bizum' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='bizum' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
+                    Bizum
+                  </button>
+                </div>
+              </div>
+              {method === 'bizum' && (
+                <div>
+                  <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Tu número de teléfono</label>
+                  <input type="tel" placeholder="+34 6XX XXX XXX" value={phone} onChange={e=>setPhone(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                    style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                </div>
+              )}
               <button type="submit" disabled={loading}
                 className="w-full py-3.5 rounded-xl text-sm font-black transition-all disabled:opacity-40"
                 style={{ background:'linear-gradient(135deg,#00ff88,#00c4aa)', color:'#040608' }}>
-                {loading ? 'Procesando...' : 'Solicitar Retiro a PayPal'}
+                {loading ? 'Procesando...' : `Solicitar Retiro por ${method === 'bizum' ? 'Bizum' : 'PayPal'}`}
               </button>
             </form>
           </Card>
