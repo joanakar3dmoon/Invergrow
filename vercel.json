@@ -3,11 +3,15 @@
   "routes": [
     {
       "src": "/api/ai/generate",
-      "dest": "/api/ai/generate.js"
+      "dest": "/api/ai/generate"
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/api/index"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
     },
     {
       "src": "/manifest.json",
