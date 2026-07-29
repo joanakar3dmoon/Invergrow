@@ -254,6 +254,24 @@ async function handleReinvest(req: VercelRequest, res: VercelResponse) {
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
+async function handleInvestFromBalance(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { amount } = req.body || {};
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) return res.status(400).json({ error: 'Importe invalido' });
+    const state = await getState();
+    const balance = parseFloat(state.balance);
+    if (amt > balance) return res.status(400).json({ error: `Saldo insuficiente. Tienes EUR${balance.toFixed(2)}` });
+    const ref = 'INV-' + Date.now().toString(36).toUpperCase();
+    await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({ type: 'INVEST', status: 'COMPLETED', amount: amt, description: `Inversion desde saldo: EUR${amt.toFixed(2)}`, reference: ref, gateway: 'INTERNAL' }) });
+    const newBalance = balance - amt;
+    const newInvested = parseFloat(state.invested_capital) + amt;
+    await patchState({ balance: newBalance, invested_capital: newInvested });
+    return res.status(200).json({ success: true, amount: amt, newBalance, newInvestedCapital: newInvested, reference: ref, message: `EUR${amt.toFixed(2)} invertidos desde tu saldo. Capital: EUR${newInvested.toFixed(2)}` });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
 async function handleYoutube(req: VercelRequest, res: VercelResponse) {
   const refreshToken = await getYtRefreshToken();
   if (!refreshToken) {
@@ -482,6 +500,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'withdraw')                        return handleWithdraw(req, res);
   if (path === 'income')                          return handleIncome(req, res);
   if (path === 'reinvest')                        return handleReinvest(req, res);
+  if (path === 'invest-from-balance')             return handleInvestFromBalance(req, res);
   if (path === 'youtube')                         return handleYoutube(req, res);
   if (path === 'youtube-callback')                return handleYoutubeCallback(req, res);
   if (path === 'admob')                           return handleAdmob(req, res);
