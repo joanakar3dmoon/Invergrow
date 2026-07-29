@@ -199,8 +199,8 @@ async function startServer() {
     });
     if (tickRevenue > 0) {
       const model = currentState.apiConfig?.payoutModel || "SPLIT_70_30";
-      const toReinvest = model==="100_REINVEST" ? tickRevenue : model==="100_WITHDRAW" ? 0 : tickRevenue*0.7;
-      const toNet      = model==="100_WITHDRAW" ? tickRevenue : model==="100_REINVEST" ? 0 : tickRevenue*0.3;
+      const toReinvest = model==="100_REINVEST" ? tickRevenue : model==="100_WITHDRAW" ? 0 : model==="SPLIT_50_50" ? tickRevenue*0.5 : tickRevenue*0.7;
+      const toNet      = model==="100_WITHDRAW" ? tickRevenue : model==="100_REINVEST" ? 0 : model==="SPLIT_50_50" ? tickRevenue*0.5 : tickRevenue*0.3;
       currentState.reinvestmentFund = Number((currentState.reinvestmentFund+toReinvest).toFixed(4));
       currentState.netGains         = Number((currentState.netGains+toNet).toFixed(4));
       if (Math.random()<0.12) {
@@ -215,8 +215,8 @@ async function startServer() {
           };
           const [action,details] = actions[w.id]||["Acción IA","Tarea completada."];
           const extra = Number((w.baseIncomeRate*(1+Math.random()*3)).toFixed(2));
-          const eReinvest = model==="100_REINVEST"?extra:model==="100_WITHDRAW"?0:extra*0.7;
-          const eNet      = model==="100_WITHDRAW"?extra:model==="100_REINVEST"?0:extra*0.3;
+          const eReinvest = model==="100_REINVEST"?extra:model==="100_WITHDRAW"?0:model==="SPLIT_50_50"?extra*0.5:extra*0.7;
+          const eNet      = model==="100_WITHDRAW"?extra:model==="100_REINVEST"?0:model==="SPLIT_50_50"?extra*0.5:extra*0.3;
           currentState.reinvestmentFund = Number((currentState.reinvestmentFund+eReinvest).toFixed(2));
           currentState.netGains         = Number((currentState.netGains+eNet).toFixed(2));
           w.totalGenerated = Number((w.totalGenerated+extra).toFixed(2));
