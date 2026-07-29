@@ -503,9 +503,10 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [amount, setAmount]     = useState('');
   const [desc, setDesc]         = useState('');
   const [loading, setLoading]   = useState(false);
-  const [method, setMethod]     = useState<'paypal' | 'bizum' | 'tarjeta'>('paypal');
+  const [method, setMethod]     = useState<'paypal' | 'bizum' | 'tarjeta' | 'bank'>('paypal');
   const [phone, setPhone]       = useState('');
   const [cardNumber, setCardNumber] = useState('');
+  const [iban, setIban]           = useState('');
   const [cardHolder, setCardHolder] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -514,15 +515,17 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
     if (!amt || amt <= 0) { showToast('error','Introduce un importe válido.'); return; }
     if (amt > state.balance) { showToast('error',`Saldo insuficiente. Disponible: €${fmt(state.balance)}`); return; }
     if (method === 'bizum' && !phone.trim()) { showToast('error','Introduce tu número de teléfono para Bizum.'); return; }
+    if (method === 'bank' && !iban.trim()) { showToast('error','Introduce tu IBAN.'); return; }
     if (method === 'tarjeta' && (!cardNumber.trim() || !cardHolder.trim())) { showToast('error','Introduce los datos de la tarjeta.'); return; }
     setLoading(true);
     try {
       const payload: any = { amount: amt, method, note: desc || `Retiro de €${amt}` };
       if (method === 'bizum') payload.phoneNumber = phone;
+      else if (method === 'bank') { payload.iban = iban.trim(); }
       else if (method === 'tarjeta') { payload.cardNumber = cardNumber.replace(/\s/g,''); payload.accountHolder = cardHolder; }
       else { payload.recipientEmail = 'joanlazaro83@gmail.com'; }
       await onWithdraw(payload);
-      setAmount(''); setDesc(''); setPhone(''); setCardNumber(''); setCardHolder('');
+      setAmount(''); setDesc(''); setPhone(''); setCardNumber(''); setCardHolder(''); setIban('');
     } catch (err: any) {
       showToast('error', err.message || 'Error al procesar el retiro');
     } finally {
@@ -600,6 +603,11 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                     style={{ background: method==='bizum' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='bizum' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
                     Bizum
                   </button>
+                  <button type="button" onClick={() => setMethod('bank')}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'bank' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    style={{ background: method==='bank' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='bank' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
+                    IBAN
+                  </button>
                   <button type="button" onClick={() => setMethod('tarjeta')}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'tarjeta' ? 'ring-2 ring-[#00ff88]' : ''}`}
                     style={{ background: method==='tarjeta' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='tarjeta' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
@@ -611,6 +619,14 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                 <div>
                   <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Tu número de teléfono</label>
                   <input type="tel" placeholder="+34 6XX XXX XXX" value={phone} onChange={e=>setPhone(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                    style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                </div>
+              )}
+              {method === 'bank' && (
+                <div>
+                  <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Tu IBAN</label>
+                  <input type="text" placeholder="ESXX XXXX XXXX XXXX XXXX XXXX" value={iban} onChange={e=>setIban(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
                     style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
                 </div>
@@ -994,7 +1010,7 @@ export default function App() {
     balance: 0, investedCapital: 0, totalWithdrawals: 0,
     reinvestmentFund: 0, netGains: 0,
     collaborators: [], transactions: [], webhookLogs: [], aiWorkers: [], aiLogs: [],
-    apiConfig: { geminiConnected:false, distributionWebhook:'', targetMarket:'', payoutModel:'SPLIT_70_30' }
+    apiConfig: { geminiConnected:false, distributionWebhook:'', targetMarket:'', payoutModel:'SPLIT_50_50' }
   });
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
