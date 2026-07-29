@@ -92,7 +92,7 @@ async function handleData(req: VercelRequest, res: VercelResponse) {
     totalWithdrawals: parseFloat(st.total_withdrawals) || 0,
     reinvestmentFund: 0,
     collaborators: [], transactions, webhookLogs: [], aiWorkers, aiLogs: [],
-    apiConfig: { geminiConnected: hasGemini, paypalConnected: hasPayPal, paypalEnv: process.env.PAYPAL_ENV || 'live', supabaseConnected: !!SUPABASE_KEY, distributionWebhook: '', targetMarket: 'ES', payoutModel: 'SPLIT_70_30' },
+    apiConfig: { geminiConnected: hasGemini, paypalConnected: hasPayPal, paypalEnv: process.env.PAYPAL_ENV || 'live', supabaseConnected: !!SUPABASE_KEY, distributionWebhook: '', targetMarket: 'ES', payoutModel: 'SPLIT_50_50' },
     lastUpdated: new Date().toISOString(), version: '4.2',
   });
 }
