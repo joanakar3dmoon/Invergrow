@@ -258,9 +258,27 @@ function YoutubeTab() {
     (async () => {
       try {
         const res = await fetch('/api/youtube');
-        const data = await res.json();
-        if (data.connected) setYtData(data.data);
-        else setYtData(prev => ({ ...prev }));
+        const raw = await res.json();
+        if (raw.connected && raw.data) {
+          const d = raw.data;
+          setYtData({
+            subscribers: d.subscribers || 0,
+            totalViews: d.total_views || 0,
+            totalVideos: d.total_videos || 0,
+            monthlyRevenue: d.revenue_30d || 0,
+            views30d: d.views_30d || 0,
+            watchMinutes30d: d.watch_minutes_30d || 0,
+            connected: true,
+            recentVideos: (d.recent_videos || []).map((v) => ({
+              title: v.title || '',
+              views: v.views || 0,
+              likes: v.likes || 0,
+              date: v.published_at ? new Date(v.published_at).toLocaleDateString('es-ES') : '',
+            })),
+          });
+        } else {
+          setYtData(prev => ({ ...prev }));
+        }
       } catch (e) {
         console.error('YT fetch error:', e);
       } finally {
