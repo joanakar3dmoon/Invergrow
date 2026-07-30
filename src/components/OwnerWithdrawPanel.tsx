@@ -14,7 +14,7 @@ export default function OwnerWithdrawPanel() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{text:string;ok:boolean}|null>(null);
   const [wAmount, setWAmount] = useState('');
-  const [wDest, setWDest] = useState('joanlazaro83@gmail.com');
+  const [wDest, setWDest] = useState('');
   const [wMethod, setWMethod] = useState('paypal');
   const [wNotes, setWNotes] = useState('');
   const [accountHolder, setAccountHolder] = useState('');
@@ -231,16 +231,18 @@ export default function OwnerWithdrawPanel() {
                wMethod === 'tarjeta' ? 'Número de tarjeta' :
                wMethod === 'crypto' ? 'Dirección de wallet' :
                wMethod === 'bank' ? 'IBAN / datos bancarios' :
-               'Email de PayPal'}
+               'Correo PayPal de destino'}
             </label>
-            <input type="text" value={wDest} onChange={e=>setWDest(e.target.value)}
+            <input type={wMethod === 'paypal' ? 'email' : 'text'} value={wDest} onChange={e=>setWDest(e.target.value)}
+              required
               placeholder={wMethod === 'bizum' ? '+34 6XX XXX XXX' :
                 wMethod === 'revolut' ? 'email@revolut.me' :
                 wMethod === 'tarjeta' ? 'XXXX XXXX XXXX XXXX' :
                 wMethod === 'crypto' ? '0x... / bc1...' :
                 wMethod === 'bank' ? 'ESXX XXXX XXXX XXXX XXXX XXXX' :
-                'Email de PayPal'}
+                'Escribe aquí cualquiera de tus correos PayPal'}
               className="w-full bg-zinc-800 text-white rounded-xl px-5 py-4 text-lg border border-zinc-700 focus:outline-none focus:border-yellow-400" />
+            {wMethod === 'paypal' && <p className="text-xs text-zinc-500 mt-2">Escribe el correo exacto de la cuenta PayPal que recibirá el dinero.</p>}
           </div>
           {wMethod === 'tarjeta' && (
             <div className="text-sm text-yellow-300 bg-yellow-950/30 rounded-xl p-4">
