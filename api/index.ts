@@ -58,8 +58,13 @@ const DEFAULT_WORKERS = [
 ];
 
 async function getWorkers(state: any): Promise<any[]> {
-  if (state.workers && Array.isArray(state.workers) && state.workers.length > 0) {
-    return state.workers;
+  let workers = state.workers;
+  // Parse if stored as JSON string
+  if (typeof workers === 'string') {
+    try { workers = JSON.parse(workers); } catch { workers = null; }
+  }
+  if (Array.isArray(workers) && workers.length > 0) {
+    return workers;
   }
   // Initialize workers in DB
   await patchState({ workers: JSON.stringify(DEFAULT_WORKERS) });
