@@ -151,7 +151,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
   try {
-    const { amount, method = 'paypal', adminCode, description, paypalEmail, iban, bankName, accountHolder, phoneNumber, cardNumber, revolutAlias } = req.body || {};
+    const { amount, method = 'paypal', adminCode, description, paypalEmail, iban, bankName, accountHolder, phoneNumber, cardNumber, revolutAlias, cryptoWallet, cryptoNetwork } = req.body || {};
     if (adminCode && adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: 'Importe inválido' });
@@ -200,6 +200,11 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       const maskedCard = cardNumber ? `${cardNumber.slice(0,4)}...${cardNumber.slice(-4)}` : '****';
       txDesc = `Retiro a tarjeta ${maskedCard} de €${amt.toFixed(2)} — pendiente de procesar manualmente.`;
       txStatus = 'PENDING';
+    } else if (method === 'crypto') {
+      const wallet = cryptoWallet || 'no especificada';
+      const network = cryptoNetwork || 'USDT';
+      txDesc = `Retiro crypto de €${amt.toFixed(2)} a wallet ${wallet.slice(0,8)}... (${network}) — pendiente de procesar manualmente.`;
+      txStatus = 'PENDING';
     } else {
       txDesc = `Retiro de €${amt.toFixed(2)} (${method}) — pendiente.`;
       txStatus = 'PENDING';
@@ -222,6 +227,8 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
         phone_number: method === 'bizum' ? phoneNumber : null,
         card_number: method === 'tarjeta' ? cardNumber : null,
         revolut_alias: method === 'revolut' ? revolutAlias : null,
+        crypto_wallet: method === 'crypto' ? cryptoWallet : null,
+        crypto_network: method === 'crypto' ? (cryptoNetwork || 'USDT') : null,
       }),
     });
     return res.status(200).json({
