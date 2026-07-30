@@ -544,7 +544,12 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
               <p className="text-5xl font-black mt-4" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
                 €{fmt(state.balance)}
               </p>
-              <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>PayPal · joanlazaro83@gmail.com</p>
+              <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                {method === 'paypal' ? 'PayPal · joanlazaro83@gmail.com' : 
+                 method === 'bizum' ? `Bizum · ${phone || 'Sin teléfono'}` : 
+                 method === 'iban' ? `IBAN · ${iban || 'Sin IBAN'}` : 
+                 `Tarjeta · ${cardNumber || 'Sin tarjeta'}`}
+              </p>
             </div>
           </Card>
 
