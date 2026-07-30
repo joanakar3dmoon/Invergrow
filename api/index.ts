@@ -58,16 +58,11 @@ const DEFAULT_WORKERS = [
 ];
 
 async function getWorkers(state: any): Promise<any[]> {
-  // Handle both stored JSON array and accidentally stringified workers
-  let workers = state.workers;
-  if (typeof workers === 'string') {
-    try { workers = JSON.parse(workers); } catch {}
-  }
-  if (workers && Array.isArray(workers) && workers.length > 0) {
-    return workers;
+  if (state.workers && Array.isArray(state.workers) && state.workers.length > 0) {
+    return state.workers;
   }
   // Initialize workers in DB
-  await patchState({ workers: DEFAULT_WORKERS });
+  await patchState({ workers: JSON.stringify(DEFAULT_WORKERS) });
   return DEFAULT_WORKERS;
 }
 
@@ -386,7 +381,7 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
     const newBalance = parseFloat((balance - cost).toFixed(2));
     await patchState({
       balance: newBalance,
-      workers: workers,
+      workers: JSON.stringify(workers),
     });
 
     const ref = 'UPG-' + Date.now().toString(36).toUpperCase();
@@ -418,6 +413,46 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
+}
+
+// ─── handleTransferGains (mover ganancias netas → balance) ──────────────────
+async function handleTransferGains(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { adminCode, amount } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const state = await getState();
+    const netGains = parseFloat(state.net_gains) || 0;
+    if (netGains <= 0) return res.status(400).json({ error: 'No hay ganancias netas para transferir' });
+    const amt = amount ? Math.min(parseFloat(amount), netGains) : netGains;
+    if (amt <= 0) return res.status(400).json({ error: 'Importe inválido' });
+    const newBalance = parseFloat((state.balance || 0) + amt);
+    const newNetGains = parseFloat((netGains - amt).toFixed(2));
+    await patchState({ balance: newBalance, net_gains: newNetGains });
+    const ref = 'TFR-' + Date.now().toString(36).toUpperCase();
+    await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({ type: 'GAINS_TRANSFER', status: 'COMPLETED', amount: amt, description: `Transferencia de ganancias → balance: €${amt.toFixed(2)}`, reference: ref, gateway: 'INTERNAL' }) });
+    return res.status(200).json({ success: true, amount: amt, newBalance, newNetGains, reference: ref, message: `€${amt.toFixed(2)} transferidos de ganancias a saldo disponible.` });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+// ─── handleAdjustBalance (ajustar saldo manualmente) ────────────────────────
+async function handleAdjustBalance(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { adminCode, amount, reason } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const amt = parseFloat(amount);
+    if (!amt || amt === 0) return res.status(400).json({ error: 'Importe inválido (no puede ser 0)' });
+    const state = await getState();
+    const currentBalance = parseFloat(state.balance) || 0;
+    const newBalance = parseFloat((currentBalance + amt).toFixed(2));
+    if (newBalance < 0) return res.status(400).json({ error: 'El saldo no puede quedar negativo' });
+    await patchState({ balance: newBalance });
+    const ref = 'ADJ-' + Date.now().toString(36).toUpperCase();
+    const desc = reason || (amt > 0 ? `Ajuste manual +€${amt.toFixed(2)}` : `Ajuste manual -€${Math.abs(amt).toFixed(2)}`);
+    await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({ type: 'MANUAL_ADJUSTMENT', status: 'COMPLETED', amount: Math.abs(amt), description: desc, reference: ref, gateway: 'INTERNAL' }) });
+    return res.status(200).json({ success: true, adjustment: amt, oldBalance: currentBalance, newBalance, reference: ref, message: `Saldo ajustado: €${currentBalance.toFixed(2)} → €${newBalance.toFixed(2)}` });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
 async function handleYoutube(req: VercelRequest, res: VercelResponse) {
@@ -617,6 +652,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'reinvest')                        return handleReinvest(req, res);
   if (path === 'invest-from-balance')             return handleInvestFromBalance(req, res);
   if (path === 'bot')                              return handleBot(req, res);
+  if (path === 'transfer-gains')                   return handleTransferGains(req, res);
+  if (path === 'adjust-balance')                   return handleAdjustBalance(req, res);
   if (path === 'ai/workers/upgrade')              return handleUpgradeWorker(req, res);
   if (path === 'youtube')                         return handleYoutube(req, res);
   if (path === 'youtube-callback')                return handleYoutubeCallback(req, res);
