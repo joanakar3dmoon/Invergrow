@@ -14,6 +14,97 @@ const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const STRIPE_WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET || '';
 const SITE_URL = process.env.SITE_URL || 'https://invergrow.vercel.app';
 
+// ─── Binance Config ────────────────────────────────────────────────────────────
+const BINANCE_API_KEY    = process.env.BINANCE_API_KEY || '';
+const BINANCE_API_SECRET = process.env.BINANCE_API_SECRET || '';
+const BINANCE_BASE       = 'https://api.binance.com';
+
+// ─── Binance Helpers ───────────────────────────────────────────────────────────
+async function binanceSign(queryString: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(BINANCE_API_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(queryString));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function binanceGet(endpoint: string, params: Record<string, string> = {}): Promise<any> {
+  const timestamp = Date.now().toString();
+  params.timestamp = timestamp;
+  const queryString = new URLSearchParams(params).toString();
+  const signature = await binanceSign(queryString);
+  const res = await fetch(`${BINANCE_BASE}${endpoint}?${queryString}&signature=${signature}`, {
+    headers: { 'X-MBX-APIKEY': BINANCE_API_KEY },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Binance error: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function binancePost(endpoint: string, params: Record<string, string> = {}): Promise<any> {
+  const timestamp = Date.now().toString();
+  params.timestamp = timestamp;
+  const queryString = new URLSearchParams(params).toString();
+  const signature = await binanceSign(queryString);
+  const res = await fetch(`${BINANCE_BASE}${endpoint}?${queryString}&signature=${signature}`, {
+    method: 'POST',
+    headers: { 'X-MBX-APIKEY': BINANCE_API_KEY, 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Binance error: ${JSON.stringify(data)}`);
+  return data;
+}
+
+// ─── handleBinanceSimpleEarn ───────────────────────────────────────────────────
+async function handleBinanceSimpleEarn(req: VercelRequest, res: VercelResponse) {
+  try {
+    if (!BINANCE_API_KEY || !BINANCE_API_SECRET) {
+      return res.status(200).json({ connected: false, message: 'Binance API no configurada' });
+    }
+    // Test connection
+    const ping = await fetch(`${BINANCE_BASE}/api/v3/ping`);
+    if (!ping.ok) return res.status(200).json({ connected: false, message: 'Binance no disponible desde esta región' });
+
+    // Get Simple Earn flexible balance
+    const earnBal = await binanceGet('/sapi/v1/simple-earn/flexible/balance');
+    // Get account info
+    const account = await binanceGet('/api/v3/account');
+    
+    return res.status(200).json({
+      connected: true,
+      simpleEarn: earnBal,
+      account: { balances: account.balances.filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0) },
+    });
+  } catch (err: any) {
+    return res.status(200).json({ connected: false, error: err.message });
+  }
+}
+
+// ─── handleBinanceDepositEarn ──────────────────────────────────────────────────
+async function handleBinanceDepositEarn(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { amount } = req.body || {};
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) return res.status(400).json({ error: 'Importe inválido' });
+    if (!BINANCE_API_KEY || !BINANCE_API_SECRET) {
+      return res.status(400).json({ error: 'Binance API no configurada' });
+    }
+    // Subscribe to Simple Earn Flexible (USDT)
+    const result = await binancePost('/sapi/v1/simple-earn/flexible/subscribe', {
+      productId: 'USDT',  // USDT flexible product
+      amount: amt.toFixed(2),
+    });
+    return res.status(200).json({
+      success: true,
+      purchaseId: result.purchaseId,
+      amount: amt,
+      message: `✅ USDT depositado en Simple Earn Flexible: ${amt.toFixed(2)} USDT`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 const ADMOB_APPS = [
   { name: 'Lanzarus',  appId: 'ca-app-pub-4903263409458961~1005307516', color: '#00ff88' },
   { name: 'r3dm/guia', appId: 'ca-app-pub-4903263409458961~2391607033', color: '#00d4ff' },
@@ -674,6 +765,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'webhook')                         return handleWebhook(req, res);
   if (path === 'create-checkout')                 return handleCreateCheckout(req, res);
   if (path === 'stripe-webhook')                  return handleStripeWebhook(req, res);
+  if (path === 'binance/simple-earn')             return handleBinanceSimpleEarn(req, res);
+  if (path === 'binance/deposit-earn')            return handleBinanceDepositEarn(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
