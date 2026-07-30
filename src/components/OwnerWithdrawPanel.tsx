@@ -65,7 +65,9 @@ export default function OwnerWithdrawPanel() {
         body.accountHolder = wNotes || 'Titular';
         body.description = `Transferencia al IBAN ${wDest.slice(0,4)}...${wDest.slice(-4)}`;
       } else if (wMethod === 'crypto') {
-        body.description = wNotes || `Cripto a ${wDest.slice(0,8)}...`;
+        body.cryptoWallet = wDest;
+        body.cryptoNetwork = wNotes || 'USDT';
+        body.description = `Cripto de €${wAmount} a ${wDest.slice(0,8)}... (${wNotes || 'USDT'})`;
       } else {
         body.description = wNotes || `Retiro ${wMethod}`;
       }
@@ -253,6 +255,7 @@ export default function OwnerWithdrawPanel() {
               placeholder={wMethod === 'bizum' ? 'Nombre titular Bizum...' :
                 wMethod === 'revolut' ? 'Nombre del titular...' :
                 wMethod === 'tarjeta' ? 'Nombre en la tarjeta...' :
+                wMethod === 'crypto' ? 'Red (USDT, BTC, ETH...)' :
                 'Motivo del retiro...'}
               className="w-full bg-zinc-800 text-white rounded-xl px-5 py-4 text-lg border border-zinc-700" />
           </div>
