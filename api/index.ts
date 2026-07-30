@@ -58,11 +58,16 @@ const DEFAULT_WORKERS = [
 ];
 
 async function getWorkers(state: any): Promise<any[]> {
-  if (state.workers && Array.isArray(state.workers) && state.workers.length > 0) {
-    return state.workers;
+  // Handle both stored JSON array and accidentally stringified workers
+  let workers = state.workers;
+  if (typeof workers === 'string') {
+    try { workers = JSON.parse(workers); } catch {}
+  }
+  if (workers && Array.isArray(workers) && workers.length > 0) {
+    return workers;
   }
   // Initialize workers in DB
-  await patchState({ workers: JSON.stringify(DEFAULT_WORKERS) });
+  await patchState({ workers: DEFAULT_WORKERS });
   return DEFAULT_WORKERS;
 }
 
@@ -381,7 +386,7 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
     const newBalance = parseFloat((balance - cost).toFixed(2));
     await patchState({
       balance: newBalance,
-      workers: JSON.stringify(workers),
+      workers: workers,
     });
 
     const ref = 'UPG-' + Date.now().toString(36).toUpperCase();
