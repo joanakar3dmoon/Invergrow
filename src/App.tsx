@@ -678,12 +678,55 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
   const [wage, setWage]   = useState('');
   const [activeSection, setActiveSection] = useState<'info'|'affiliate'|'owner'>('info');
 
+  // ── Owner controls state ──
+  const [ownerLoading, setOwnerLoading] = useState(false);
+  const [ownerMsg, setOwnerMsg] = useState<{text:string;ok:boolean}|null>(null);
+  const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustReason, setAdjustReason] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [workerId, setWorkerId] = useState('');
+  const [workerLevel, setWorkerLevel] = useState('1');
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name||!role||!wage) { showToast('error','Rellena todos los campos.'); return; }
     await onAddCollaborator({ name, role, wage: parseFloat(wage) });
     setName(''); setRole(''); setWage('');
     showToast('success', `Colaborador ${name} añadido.`);
+  };
+
+  const doTransferGains = async () => {
+    setOwnerLoading(true); setOwnerMsg(null);
+    try {
+      const amt = transferAmount ? parseFloat(transferAmount) : undefined;
+      const res = await fetch('/api/transfer-gains', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminCode:'joan123', amount: amt }) });
+      const data = await res.json();
+      setOwnerMsg({text: data.message || data.error, ok: data.success});
+      if (data.success) setTransferAmount('');
+    } catch (e: any) { setOwnerMsg({text: 'Error: ' + e.message, ok: false}); }
+    setOwnerLoading(false);
+  };
+
+  const doAdjustBalance = async () => {
+    setOwnerLoading(true); setOwnerMsg(null);
+    try {
+      const res = await fetch('/api/adjust-balance', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminCode:'joan123', amount: parseFloat(adjustAmount), reason: adjustReason }) });
+      const data = await res.json();
+      setOwnerMsg({text: data.message || data.error, ok: data.success});
+      if (data.success) { setAdjustAmount(''); setAdjustReason(''); }
+    } catch (e: any) { setOwnerMsg({text: 'Error: ' + e.message, ok: false}); }
+    setOwnerLoading(false);
+  };
+
+  const doUpgradeWorker = async () => {
+    setOwnerLoading(true); setOwnerMsg(null);
+    try {
+      const res = await fetch('/api/ai/workers/upgrade', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ workerId: workerId || undefined, level: parseInt(workerLevel), adminCode:'joan123' }) });
+      const data = await res.json();
+      setOwnerMsg({text: data.message || data.error || JSON.stringify(data), ok: data.success});
+      if (data.success) { setWorkerId(''); setWorkerLevel('1'); }
+    } catch (e: any) { setOwnerMsg({text: 'Error: ' + e.message, ok: false}); }
+    setOwnerLoading(false);
   };
 
   return (
@@ -694,7 +737,7 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
         {[
           { id: 'info' as const,       label: 'Sistema & Equipo', icon: <Shield className="w-3.5 h-3.5"/> },
           { id: 'affiliate' as const,  label: 'Workers',     icon: <Zap className="w-3.5 h-3.5"/> },
-          { id: 'owner' as const,      label: '💰 Retiros',       icon: <DollarSign className="w-3.5 h-3.5"/> },
+          { id: 'owner' as const,      label: '💰 Owner',       icon: <DollarSign className="w-3.5 h-3.5"/> },
         ].map(s => (
           <button key={s.id} onClick={() => setActiveSection(s.id)}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all"
@@ -719,7 +762,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
                   { label: 'Propietario',    value: 'Joan · r3dm' },
                   { label: 'PayPal retiros', value: 'joanlazaro83@gmail.com' },
                   { label: 'Canal YouTube', value: '@Equilibrio-c2k' },
-                  { label: 'Canal YouTube',  value: '@Equilibrio-c2k' },
                   { label: 'GitHub',         value: 'joanakar3dmoon/Invergrow' },
                   { label: 'Vercel',         value: 'invergrow.vercel.app' },
                 ].map((r,i) => (
@@ -781,9 +823,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
                     <span className="px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}>5.110+ vídeos</span>
                   </div>
                 </div>
-
-                
-
                 <div className="p-4 rounded-xl" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.12)' }}>
                   <p className="text-sm font-bold text-white mb-2">📱 AdMob — Lanzarus / r3dm.guia / Nexusia</p>
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Ingresos por publicidad en las apps. Datos desde la API de Google AdMob.</p>
@@ -796,8 +835,103 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
           </motion.div>
         )}
         {activeSection === 'owner' && (
-          <motion.div key="owner" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}}>
-            <OwnerWithdrawPanel />
+          <motion.div key="owner" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} className="space-y-5">
+            {/* ── Balance State ── */}
+            <Card>
+              <SectionHeader icon={<Wallet />} title="Estado del Sistema" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-4 rounded-xl text-center" style={{ background:'rgba(0,255,136,0.05)', border:'1px solid rgba(0,255,136,0.1)' }}>
+                  <p className="text-xs text-zinc-500">Saldo</p>
+                  <p className="text-2xl font-black" style={{ color:'#00ff88' }}>€{fmt(state.balance)}</p>
+                </div>
+                <div className="p-4 rounded-xl text-center" style={{ background:'rgba(168,85,247,0.05)', border:'1px solid rgba(168,85,247,0.1)' }}>
+                  <p className="text-xs text-zinc-500">Ganancias Netas</p>
+                  <p className="text-2xl font-black" style={{ color:'#a855f7' }}>€{fmt(state.netGains)}</p>
+                </div>
+                <div className="p-4 rounded-xl text-center" style={{ background:'rgba(0,212,255,0.05)', border:'1px solid rgba(0,212,255,0.1)' }}>
+                  <p className="text-xs text-zinc-500">Capital Invertido</p>
+                  <p className="text-2xl font-black" style={{ color:'#00d4ff' }}>€{fmt(state.investedCapital)}</p>
+                </div>
+                <div className="p-4 rounded-xl text-center" style={{ background:'rgba(255,200,0,0.05)', border:'1px solid rgba(255,200,0,0.1)' }}>
+                  <p className="text-xs text-zinc-500">Total Retirado</p>
+                  <p className="text-2xl font-black" style={{ color:'#f59e0b' }}>€{fmt(state.totalWithdrawals)}</p>
+                </div>
+              </div>
+            </Card>
+
+            {ownerMsg && (
+              <div className="p-4 rounded-xl text-sm font-bold" style={{
+                background: ownerMsg.ok ? 'rgba(0,255,136,0.1)' : 'rgba(239,68,68,0.1)',
+                border: '1px solid ' + (ownerMsg.ok ? 'rgba(0,255,136,0.2)' : 'rgba(239,68,68,0.2)'),
+                color: ownerMsg.ok ? '#00ff88' : '#ef4444'
+              }}>{ownerMsg.text}</div>
+            )}
+
+            {/* ── 1. Transferir Ganancias Netas → Balance ── */}
+            <Card>
+              <SectionHeader icon={<ArrowUpRight />} title="Transferir Ganancias Netas → Balance" sub="Mueve tus ganancias acumuladas al saldo disponible" iconColor="#a855f7" iconBg="rgba(168,85,247,0.1)" />
+              <p className="text-xs mb-3" style={{ color:'rgba(255,255,255,0.4)' }}>
+                Ganancias netas disponibles: <span className="text-purple-400 font-bold">€{fmt(state.netGains)}</span>
+              </p>
+              <div className="flex gap-2 mb-2">
+                <input type="number" placeholder="Importe (vacío = todo)" value={transferAmount} onChange={e=>setTransferAmount(e.target.value)}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm text-white outline-none font-mono"
+                  style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                <button onClick={doTransferGains} disabled={ownerLoading || state.netGains <= 0}
+                  className="px-5 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
+                  style={{ background:'rgba(168,85,247,0.15)', border:'1px solid rgba(168,85,247,0.3)', color:'#a855f7' }}>
+                  {ownerLoading ? '...' : 'Transferir'}
+                </button>
+              </div>
+            </Card>
+
+            {/* ── 2. Ajustar Saldo (Déficit/Superávit) ── */}
+            <Card>
+              <SectionHeader icon={<Wallet />} title="Ajustar Saldo Manualmente" sub="Para déficits o correcciones" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" />
+              <div className="flex gap-2 mb-2">
+                <input type="number" placeholder="+50 o -20" value={adjustAmount} onChange={e=>setAdjustAmount(e.target.value)}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm text-white outline-none font-mono"
+                  style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+              </div>
+              <input type="text" placeholder="Motivo del ajuste (opcional)" value={adjustReason} onChange={e=>setAdjustReason(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none mb-2"
+                style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+              <button onClick={doAdjustBalance} disabled={ownerLoading || !adjustAmount}
+                className="w-full py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
+                style={{ background:'rgba(245,158,11,0.15)', border:'1px solid rgba(245,158,11,0.3)', color:'#f59e0b' }}>
+                {ownerLoading ? 'Procesando...' : 'Aplicar Ajuste'}
+              </button>
+            </Card>
+
+            {/* ── 3. Upgrade Workers ── */}
+            <Card>
+              <SectionHeader icon={<Zap />} title="Upgrade de Workers" sub="Mejora el nivel de los workers IA" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
+              {state.aiWorkers && state.aiWorkers.length > 0 && (
+                <div className="mb-3 space-y-1">
+                  {state.aiWorkers.map((w: any) => (
+                    <div key={w.id} className="flex items-center justify-between px-3 py-2 rounded-xl text-xs" style={{ background:'rgba(255,255,255,0.02)' }}>
+                      <span className="text-white">{w.name || w.id}</span>
+                      <span className="text-zinc-400">Nivel {w.level || 1} · {w.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 mb-2">
+                <input type="text" placeholder="ID worker (vacío = primero)" value={workerId} onChange={e=>setWorkerId(e.target.value)}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm text-white outline-none font-mono"
+                  style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                <select value={workerLevel} onChange={e=>setWorkerLevel(e.target.value)}
+                  className="px-4 py-3 rounded-xl text-sm text-white outline-none"
+                  style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }}>
+                  {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>Nivel {n}</option>)}
+                </select>
+              </div>
+              <button onClick={doUpgradeWorker} disabled={ownerLoading}
+                className="w-full py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
+                style={{ background:'rgba(0,212,255,0.15)', border:'1px solid rgba(0,212,255,0.3)', color:'#00d4ff' }}>
+                {ownerLoading ? 'Procesando...' : '⬆ Upgrade Worker'}
+              </button>
+            </Card>
           </motion.div>
         )}
       </AnimatePresence>
