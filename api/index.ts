@@ -159,9 +159,16 @@ async function getWorkers(state: any): Promise<any[]> {
   if (Array.isArray(workers) && workers.length > 0) {
     return workers;
   }
-  // Initialize workers in DB
-  await patchState({ workers: JSON.stringify(DEFAULT_WORKERS) });
-  return DEFAULT_WORKERS;
+  // Try to read from DB one more time (fresh fetch)
+  const fresh = await supa('invergrow_state?id=eq.main&select=workers');
+  if (Array.isArray(fresh) && fresh[0]) {
+    let fw = fresh[0].workers;
+    if (typeof fw === 'string') { try { fw = JSON.parse(fw); } catch { fw = null; } }
+    if (Array.isArray(fw) && fw.length > 0) return fw;
+  }
+  // NEVER reset to defaults - just return what we have or empty array
+  console.warn('WARNING: No workers found in DB, returning empty array');
+  return [];
 }
 
 // ─── Get worker cost for next level ──────────────────────────────────────────
@@ -742,6 +749,27 @@ async function handleStripeWebhook(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+// ─── handleRestoreWorkers (restaurar workers a Lv.2) ──────────────────────────
+async function handleRestoreWorkers(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { adminCode } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    
+    const LV2_WORKERS = [
+      { id: 'ai-1', name: 'ContentBot Alpha',   role: 'Creador de Contenido',    status: 'ACTIVE', level: 2, model: 'gemini-flash', baseIncomeRate: 0.03,  unlocked: true,  costToUnlock: 0,   costToUpgrade: 75,  totalGenerated: 19.95, icon: '🤖' },
+      { id: 'ai-2', name: 'TradeBot Beta',       role: 'Analisis de Mercado',     status: 'ACTIVE', level: 2, model: 'gemini-flash', baseIncomeRate: 0.045, unlocked: true,  costToUnlock: 0,   costToUpgrade: 113, totalGenerated: 0,    icon: '📈' },
+      { id: 'ai-3', name: 'AffiliateBot Gamma',  role: 'Marketing de Afiliados',  status: 'ACTIVE', level: 2, model: 'gemini-flash', baseIncomeRate: 0.0375,unlocked: true,  costToUnlock: 0,   costToUpgrade: 90,  totalGenerated: 0,    icon: '🛒' },
+      { id: 'ai-4', name: 'DataBot Delta',       role: 'Procesamiento de Datos',  status: 'IDLE',   level: 1, model: 'gemini-flash', baseIncomeRate: 0.015, unlocked: false, costToUnlock: 100, costToUpgrade: 50,  totalGenerated: 0,    icon: '💾' },
+    ];
+    
+    await patchState({ workers: JSON.stringify(LV2_WORKERS) });
+    return res.status(200).json({ success: true, message: '✅ Workers restaurados a Lv.2 (DataBot sigue Lv.1 locked)' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
@@ -769,6 +797,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'stripe-webhook')                  return handleStripeWebhook(req, res);
   if (path === 'binance/simple-earn')             return handleBinanceSimpleEarn(req, res);
   if (path === 'binance/deposit-earn')            return handleBinanceDepositEarn(req, res);
+  if (path === 'admin/restore-workers')           return handleRestoreWorkers(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
