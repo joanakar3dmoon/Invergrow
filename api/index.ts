@@ -36,12 +36,12 @@ async function supa(path: string, opts: RequestInit = {}): Promise<any> {
   try { return JSON.parse(text); } catch { return null; }
 }
 
-// ─── State helpers ────────────────────────────────────────────────────────────
 async function getState(): Promise<any> {
   const arr = await supa('invergrow_state?id=eq.main&select=*');
   if (Array.isArray(arr) && arr[0]) return arr[0];
   return { balance: 0, net_gains: 0, invested_capital: 0, total_withdrawals: 0 };
 }
+
 async function patchState(fields: Record<string, any>) {
   await supa('invergrow_state?id=eq.main', {
     method: 'PATCH',
@@ -49,25 +49,32 @@ async function patchState(fields: Record<string, any>) {
   });
 }
 
-// ─── OAuth helpers ────────────────────────────────────────────────────────────
-async function getYtRefreshToken(): Promise<string | null> {
-  const rows = await supa('invergrow_state?id=eq.main&select=yt_refresh_token');
-  if (rows?.[0]?.yt_refresh_token) return rows[0].yt_refresh_token;
-  return process.env.YT_REFRESH_TOKEN || null;
-}
-async function exchangeForAccessToken(refreshToken: string, clientId: string, clientSecret: string): Promise<string> {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }),
-  });
-  const data = await res.json() as any;
-  if (!data.access_token) throw new Error(`No access token: ${JSON.stringify(data)}`);
-  return data.access_token;
+// ─── Default workers ─────────────────────────────────────────────────────────
+const DEFAULT_WORKERS = [
+  { id: 'ai-1', name: 'ContentBot Alpha',   role: 'Creador de Contenido',    status: 'ACTIVE', level: 1, model: 'gemini-flash', baseIncomeRate: 0.02,  unlocked: true,  costToUnlock: 0,   costToUpgrade: 50, totalGenerated: 0, icon: '🤖' },
+  { id: 'ai-2', name: 'TradeBot Beta',       role: 'Analisis de Mercado',     status: 'ACTIVE', level: 1, model: 'gemini-flash', baseIncomeRate: 0.03,  unlocked: true,  costToUnlock: 0,   costToUpgrade: 75, totalGenerated: 0, icon: '📈' },
+  { id: 'ai-3', name: 'AffiliateBot Gamma',  role: 'Marketing de Afiliados',  status: 'ACTIVE', level: 1, model: 'gemini-flash', baseIncomeRate: 0.025, unlocked: true,  costToUnlock: 0,   costToUpgrade: 60, totalGenerated: 0, icon: '🛒' },
+  { id: 'ai-4', name: 'DataBot Delta',       role: 'Procesamiento de Datos',  status: 'IDLE',   level: 1, model: 'gemini-flash', baseIncomeRate: 0.015, unlocked: false, costToUnlock: 100, costToUpgrade: 50, totalGenerated: 0, icon: '💾' },
+];
+
+async function getWorkers(state: any): Promise<any[]> {
+  if (state.workers && Array.isArray(state.workers) && state.workers.length > 0) {
+    return state.workers;
+  }
+  // Initialize workers in DB
+  await patchState({ workers: JSON.stringify(DEFAULT_WORKERS) });
+  return DEFAULT_WORKERS;
 }
 
-// ─── Route handlers ───────────────────────────────────────────────────────────
+// ─── Get worker cost for next level ──────────────────────────────────────────
+function getUpgradeCost(worker: any): number {
+  const base = worker.costToUpgrade || 50;
+  const level = worker.level || 1;
+  // Cost increases by 50% each level
+  return Math.round(base * Math.pow(1.5, level - 1));
+}
 
+// ─── handleData ──────────────────────────────────────────────────────────────
 async function handleData(req: VercelRequest, res: VercelResponse) {
   const st = await getState();
   const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=20');
@@ -79,12 +86,7 @@ async function handleData(req: VercelRequest, res: VercelResponse) {
   }));
   const hasGemini = !!(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 10);
   const hasPayPal = !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_ID !== 'PENDIENTE');
-  const aiWorkers = [
-    { id: 'ai-1', name: 'ContentBot Alpha',   role: 'Creador de Contenido',    status: 'ACTIVE', level: 1, model: 'gemini-flash', baseIncomeRate: 0.02,  unlocked: true,  costToUnlock: 0,   costToUpgrade: 50, totalGenerated: 0, icon: '🤖' },
-    { id: 'ai-2', name: 'TradeBot Beta',       role: 'Analisis de Mercado',     status: 'ACTIVE', level: 1, model: 'gemini-flash', baseIncomeRate: 0.03,  unlocked: true,  costToUnlock: 0,   costToUpgrade: 75, totalGenerated: 0, icon: '📈' },
-    { id: 'ai-3', name: 'AffiliateBot Gamma',  role: 'Marketing de Afiliados',  status: 'ACTIVE', level: 1, model: 'gemini-flash', baseIncomeRate: 0.025, unlocked: true,  costToUnlock: 0,   costToUpgrade: 60, totalGenerated: 0, icon: '🛒' },
-    { id: 'ai-4', name: 'DataBot Delta',       role: 'Procesamiento de Datos',  status: 'IDLE',   level: 1, model: 'gemini-flash', baseIncomeRate: 0.015, unlocked: false, costToUnlock: 100, costToUpgrade: 50, totalGenerated: 0, icon: '💾' },
-  ];
+  const aiWorkers = await getWorkers(st);
   return res.status(200).json({
     balance: parseFloat(st.balance) || 0,
     netGains: parseFloat(st.net_gains) || 0,
@@ -93,7 +95,7 @@ async function handleData(req: VercelRequest, res: VercelResponse) {
     reinvestmentFund: 0,
     collaborators: [], transactions, webhookLogs: [], aiWorkers, aiLogs: [],
     apiConfig: { geminiConnected: hasGemini, paypalConnected: hasPayPal, paypalEnv: process.env.PAYPAL_ENV || 'live', supabaseConnected: !!SUPABASE_KEY, distributionWebhook: '', targetMarket: 'ES', payoutModel: 'SPLIT_50_50' },
-    lastUpdated: new Date().toISOString(), version: '4.2',
+    lastUpdated: new Date().toISOString(), version: '4.3',
   });
 }
 
@@ -159,7 +161,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
     const ref = `WD-${Date.now()}`;
     let txStatus = 'COMPLETED';
     let txDesc = description || `Retiro ${method}`;
-    let deductBalance = true; // solo falso si PayPal falla
+    let deductBalance = true;
 
     if (method === 'paypal') {
       const email = paypalEmail || 'joanlazaro83@gmail.com';
@@ -224,7 +226,8 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
     });
     return res.status(200).json({
       success: true, reference: ref, amount: amt,
-      newBalance, totalWithdrawals: newWithdrawals,
+      newBalance: deductBalance ? parseFloat((available - amt).toFixed(2)) : available,
+      totalWithdrawals: deductBalance ? parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2)) : state.total_withdrawals,
       status: txStatus,
       message: txDesc,
     });
@@ -297,15 +300,14 @@ async function handleBot(req: VercelRequest, res: VercelResponse) {
     const balance = parseFloat(state.balance) || 0;
     const invested = parseFloat(state.invested_capital) || 0;
     const netGains = parseFloat(state.net_gains) || 0;
+    const workers = await getWorkers(state);
 
-    // Obtener últimas transacciones de inversión
     const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=5');
     const recentTxs = (Array.isArray(txArr) ? txArr : []).map((t: any) => ({
       type: t.type, amount: parseFloat(t.amount) || 0, status: t.status,
       description: t.description, date: t.created_at, gateway: t.gateway,
     }));
 
-    // Stats del bot en tiempo real
     const monthlyReturn = invested * 0.124 / 12;
     const dailyRate = 0.124 / 365;
     const todayEarnings = invested * dailyRate;
@@ -323,12 +325,12 @@ async function handleBot(req: VercelRequest, res: VercelResponse) {
         marketAnalyses: Math.floor(invested / 5),
       },
       recentTransactions: recentTxs,
-      workers: [
-        { id: 'ai-1', name: 'ContentBot Alpha',   role: 'Creador de Contenido',    status: 'ACTIVE', icon: '🤖', rate: `${(0.02).toFixed(2)}€/día`, color: '#00ff88' },
-        { id: 'ai-2', name: 'TradeBot Beta',       role: 'Análisis de Mercado',     status: 'ACTIVE', icon: '📈', rate: `${(0.03).toFixed(2)}€/día`, color: '#00d4ff' },
-        { id: 'ai-3', name: 'AffiliateBot Gamma',  role: 'Marketing de Afiliados',  status: 'ACTIVE', icon: '🛒', rate: `${(0.025).toFixed(2)}€/día`, color: '#a855f7' },
-        { id: 'ai-4', name: 'DataBot Delta',       role: 'Procesamiento de Datos',  status: invested > 50 ? 'ACTIVE' : 'IDLE', icon: '💾', rate: `${(0.015).toFixed(2)}€/día`, color: '#f59e0b' },
-      ],
+      workers: workers.map((w: any) => ({
+        id: w.id, name: w.name, role: w.role,
+        status: w.status, icon: w.icon, level: w.level,
+        rate: `${(w.baseIncomeRate || 0.02).toFixed(2)}€/día`,
+        color: ['#00ff88','#00d4ff','#a855f7','#f59e0b'][parseInt(w.id.slice(-1))-1] || '#00ff88',
+      })),
       log: [
         { time: new Date().toISOString(), text: `Capital invertido: EUR${invested.toFixed(2)}`, type: 'info' },
         { time: new Date().toISOString(), text: `Rendimiento diario estimado: EUR${todayEarnings.toFixed(4)}`, type: 'analysis' },
@@ -338,6 +340,78 @@ async function handleBot(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message, active: false });
+  }
+}
+
+// ─── handleUpgradeWorker ─────────────────────────────────────────────────────
+async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { workerId, adminCode } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    if (!workerId) return res.status(400).json({ error: 'workerId requerido' });
+
+    const state = await getState();
+    let workers = await getWorkers(state);
+    const idx = workers.findIndex((w: any) => w.id === workerId);
+    if (idx === -1) return res.status(404).json({ error: 'Worker no encontrado' });
+
+    const worker = workers[idx];
+    const cost = getUpgradeCost(worker);
+    const balance = parseFloat(state.balance) || 0;
+
+    if (balance < cost) {
+      return res.status(400).json({
+        error: `Saldo insuficiente. Necesitas €${cost.toFixed(2)} y tienes €${balance.toFixed(2)}`,
+        balance, cost,
+      });
+    }
+
+    // Upgrade worker
+    const newLevel = (worker.level || 1) + 1;
+    const newCostToUpgrade = Math.round(cost * 1.5); // Next upgrade cost
+    workers[idx] = {
+      ...worker,
+      level: newLevel,
+      costToUpgrade: newCostToUpgrade,
+      baseIncomeRate: parseFloat((worker.baseIncomeRate * 1.5).toFixed(4)),
+    };
+
+    // Update state
+    const newBalance = parseFloat((balance - cost).toFixed(2));
+    await patchState({
+      balance: newBalance,
+      workers: JSON.stringify(workers),
+    });
+
+    const ref = 'UPG-' + Date.now().toString(36).toUpperCase();
+    await supa('invergrow_transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'WORKER_UPGRADE',
+        status: 'COMPLETED',
+        amount: cost,
+        description: `Upgrade ${worker.name} a Lv.${newLevel} — €${cost.toFixed(2)}`,
+        reference: ref,
+        gateway: 'INTERNAL',
+      }),
+    });
+
+    return res.status(200).json({
+      success: true,
+      workerId,
+      workerName: worker.name,
+      oldLevel: worker.level,
+      newLevel,
+      cost,
+      newBalance,
+      baseIncomeRate: workers[idx].baseIncomeRate,
+      nextUpgradeCost: newCostToUpgrade,
+      reference: ref,
+      message: `✅ ${worker.name} subido a Lv.${newLevel} por €${cost.toFixed(2)}. Próximo upgrade: €${newCostToUpgrade}`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 }
 
@@ -471,7 +545,6 @@ async function handleCreateCheckout(req: VercelRequest, res: VercelResponse) {
     const amt = parseInt(amount) || 10;
     const desc = description || 'Inversión en InverGrow';
     
-    // Create Stripe Checkout Session
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
@@ -502,52 +575,21 @@ async function handleStripeWebhook(req: VercelRequest, res: VercelResponse) {
   try {
     const sig = req.headers['stripe-signature'] as string || '';
     const rawBody = req.body;
-    
-    // Verify signature using Stripe's verification API
-    // We verify by reconstructing the payload
     let event: any = rawBody;
-    
-    // Optional: verify via Stripe API
     if (STRIPE_WEBHOOK_SECRET) {
-      // We trust the event from Stripe's servers
       const eventType = event?.type || '';
       const session = event?.data?.object || {};
-      
       if (eventType === 'checkout.session.completed' || eventType === 'payment_intent.succeeded') {
         const amount = (session.amount_total || session.amount || 0) / 100;
         const email = session.customer_email || session.receipt_email || 'inversor@invergrow.com';
         const desc = 'Stripe: Pago recibido - €' + amount.toFixed(2);
-        
         if (amount > 0) {
-          // Register the income via the API
-          try {
-            await fetch(SITE_URL + '/api/income', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ amount, source: 'stripe', description: desc }),
-            });
-          } catch {}
-          
-          // Log the transaction in Supabase
-          try {
-            await supa('invergrow_transactions', {
-              method: 'POST',
-              body: JSON.stringify({
-                type: 'DEPOSIT',
-                status: 'COMPLETED',
-                amount,
-                description: desc,
-                reference: session.id || 'stripe_' + Date.now(),
-                gateway: 'STRIPE',
-              }),
-            });
-          } catch {}
-          
+          try { await fetch(SITE_URL + '/api/income', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, source: 'stripe', description: desc }) }); } catch {}
+          try { await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({ type: 'DEPOSIT', status: 'COMPLETED', amount, description: desc, reference: session.id || 'stripe_' + Date.now(), gateway: 'STRIPE' }) }); } catch {}
           console.log('Stripe payment processed:', amount, 'EUR from', email);
         }
       }
     }
-    
     res.json({ received: true });
   } catch (e: any) {
     console.error('Stripe webhook error:', e.message);
@@ -561,7 +603,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Webhook-Source');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Extraer ruta de la URL
   const url = req.url || '';
   const path = url.replace(/^\/api\/?/, '').split('?')[0];
 
@@ -571,6 +612,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'reinvest')                        return handleReinvest(req, res);
   if (path === 'invest-from-balance')             return handleInvestFromBalance(req, res);
   if (path === 'bot')                              return handleBot(req, res);
+  if (path === 'ai/workers/upgrade')              return handleUpgradeWorker(req, res);
   if (path === 'youtube')                         return handleYoutube(req, res);
   if (path === 'youtube-callback')                return handleYoutubeCallback(req, res);
   if (path === 'admob')                           return handleAdmob(req, res);
