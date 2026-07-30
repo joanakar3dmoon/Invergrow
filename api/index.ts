@@ -690,6 +690,74 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
 }
 
 // ─── Main router ──────────────────────────────────────────────────────────────
+// ─── handleStripePayout ─────────────────────────────────────────────────────
+async function handleStripePayout(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { amount, adminCode, iban } = req.body || {};
+    if (adminCode && adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) return res.status(400).json({ error: 'Importe inválido' });
+    if (!STRIPE_SECRET_KEY) return res.status(400).json({ error: 'Stripe no configurado' });
+    if (!iban) return res.status(400).json({ error: 'IBAN requerido' });
+
+    const state = await getState();
+    const available = parseFloat((state.balance || 0).toFixed(2));
+    if (amt > available) return res.status(400).json({ error: 'Saldo insuficiente. Disponible: \u20ac' + available.toFixed(2), available });
+
+    // Stripe Payout
+    const payoutRes = await fetch('https://api.stripe.com/v1/payouts', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + STRIPE_SECRET_KEY,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        amount: String(Math.round(amt * 100)),
+        currency: 'eur',
+        destination_type: 'bank_account',
+        method: 'standard',
+        statement_descriptor: 'INVERGROW',
+      }),
+    });
+    const payoutData: any = await payoutRes.json();
+
+    if (!payoutRes.ok) {
+      return res.status(400).json({
+        error: 'Stripe: ' + (payoutData.error?.message || payoutData.error?.code || 'desconocido'),
+      });
+    }
+
+    const ref = 'WD-' + Date.now();
+    const newBalance = parseFloat((available - amt).toFixed(2));
+    await supa('invergrow_transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'WITHDRAWAL', status: 'COMPLETED',
+        amount: amt,
+        description: 'Retiro Stripe IBAN \u20ac' + amt.toFixed(2) + ' — ' + payoutData.id,
+        reference: ref, gateway: 'STRIPE',
+        iban: iban.slice(0, 8) + '...',
+      }),
+    });
+    await patchState({
+      balance: newBalance,
+      total_withdrawals: parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2))
+    });
+
+    return res.status(200).json({
+      success: true, reference: ref, amount: amt,
+      stripePayoutId: payoutData.id,
+      newBalance,
+      status: payoutData.status,
+      arrivalDate: payoutData.arrival_date,
+      message: '\u20ac' + amt.toFixed(2) + ' enviado a tu cuenta. ID: ' + payoutData.id,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 async function handleCreateCheckout(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
@@ -793,6 +861,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'admob')                           return handleAdmob(req, res);
   if (path === 'sync')                            return handleSync(req, res);
   if (path === 'webhook')                         return handleWebhook(req, res);
+  if (path === 'stripe-payout')                   return handleStripePayout(req, res);
   if (path === 'create-checkout')                 return handleCreateCheckout(req, res);
   if (path === 'stripe-webhook')                  return handleStripeWebhook(req, res);
   if (path === 'binance/simple-earn')             return handleBinanceSimpleEarn(req, res);
