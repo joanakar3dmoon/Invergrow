@@ -271,7 +271,10 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
     let deductBalance = true;
 
     if (method === 'paypal') {
-      const email = paypalEmail || 'joanlazaro83@gmail.com';
+      const email = String(paypalEmail || '').trim();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Escribe un correo PayPal válido como destino.' });
+      }
       if (PAYPAL_CLIENT && PAYPAL_SECRET) {
         try {
           const ppResult = await sendPayPalPayout(email, amt, description || 'Retiro InverGrow');
@@ -327,7 +330,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         type: 'WITHDRAWAL', amount: amt, status: txStatus,
         reference: ref, description: txDesc, gateway: method.toUpperCase(),
-        paypal_email: method === 'paypal' ? (paypalEmail || 'joanlazaro83@gmail.com') : null,
+        paypal_email: method === 'paypal' ? String(paypalEmail).trim() : null,
         iban: method === 'bank' ? iban : null,
         bank_name: bankName || null,
         account_holder: accountHolder || null,
