@@ -17,6 +17,7 @@ export default function OwnerWithdrawPanel() {
   const [wDest, setWDest] = useState('joanlazaro83@gmail.com');
   const [wMethod, setWMethod] = useState('paypal');
   const [wNotes, setWNotes] = useState('');
+  const [accountHolder, setAccountHolder] = useState('');
   const [iAmount, setIAmount] = useState('');
   const [iSource, setISource] = useState('AdMob');
   const [iDesc, setIDesc] = useState('');
@@ -62,12 +63,10 @@ export default function OwnerWithdrawPanel() {
         body.description = wNotes || `Revolut a ${wDest}`;
       } else if (wMethod === 'bank') {
         body.iban = wDest;
-        body.accountHolder = wNotes || 'Titular';
+        body.accountHolder = accountHolder || wNotes || 'Titular';
         body.description = `Transferencia al IBAN ${wDest.slice(0,4)}...${wDest.slice(-4)}`;
       } else if (wMethod === 'crypto') {
-        body.cryptoWallet = wDest;
-        body.cryptoNetwork = wNotes || 'USDT';
-        body.description = `Cripto de €${wAmount} a ${wDest.slice(0,8)}... (${wNotes || 'USDT'})`;
+        body.description = wNotes || `Cripto a ${wDest.slice(0,8)}...`;
       } else {
         body.description = wNotes || `Retiro ${wMethod}`;
       }
@@ -221,7 +220,6 @@ export default function OwnerWithdrawPanel() {
               <option value="paypal">PayPal</option>
               <option value="bizum">Bizum</option>
               <option value="revolut">Revolut</option>
-              <option value="tarjeta">Tarjeta de débito</option>
               <option value="bank">Transferencia bancaria</option>
               <option value="crypto">Cripto</option>
             </select>
@@ -244,6 +242,19 @@ export default function OwnerWithdrawPanel() {
                 'Email de PayPal'}
               className="w-full bg-zinc-800 text-white rounded-xl px-5 py-4 text-lg border border-zinc-700 focus:outline-none focus:border-yellow-400" />
           </div>
+          {wMethod === 'tarjeta' && (
+            <div className="text-sm text-yellow-300 bg-yellow-950/30 rounded-xl p-4">
+              No introduzcas CVV ni fecha de caducidad aquí. Este panel no está conectado a un proveedor push-to-card y no debe almacenar datos completos de tarjeta.
+            </div>
+          )}
+          {wMethod === 'bank' && (
+            <div>
+              <label className="text-sm text-zinc-500 mb-2 block">Nombre del titular</label>
+              <input type="text" value={accountHolder} onChange={e=>setAccountHolder(e.target.value)}
+                placeholder="Tu nombre completo"
+                className="w-full bg-zinc-800 text-white rounded-xl px-5 py-4 text-lg border border-zinc-700 focus:outline-none focus:border-yellow-400" />
+            </div>
+          )}
           {wMethod !== 'paypal' && (
             <div className="text-sm text-zinc-500 bg-zinc-800 rounded-xl p-4 border border-yellow-400/20">
               <span className="text-yellow-400">⚠️ Procesamiento manual:</span> los retiros por {wMethod === 'bizum' ? 'Bizum' : wMethod === 'revolut' ? 'Revolut' : wMethod === 'tarjeta' ? 'tarjeta de débito' : wMethod} se registran para ejecución manual por el administrador. El saldo se descuenta automáticamente.
@@ -255,7 +266,6 @@ export default function OwnerWithdrawPanel() {
               placeholder={wMethod === 'bizum' ? 'Nombre titular Bizum...' :
                 wMethod === 'revolut' ? 'Nombre del titular...' :
                 wMethod === 'tarjeta' ? 'Nombre en la tarjeta...' :
-                wMethod === 'crypto' ? 'Red (USDT, BTC, ETH...)' :
                 'Motivo del retiro...'}
               className="w-full bg-zinc-800 text-white rounded-xl px-5 py-4 text-lg border border-zinc-700" />
           </div>
