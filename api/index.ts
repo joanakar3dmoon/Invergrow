@@ -60,20 +60,22 @@ async function handleBinanceSimpleEarn(req: VercelRequest, res: VercelResponse) 
     if (!BINANCE_API_KEY || !BINANCE_API_SECRET) {
       return res.status(200).json({ connected: false, message: 'Binance API no configurada' });
     }
-    // Test connection
-    const ping = await fetch(`${BINANCE_BASE}/api/v3/ping`);
-    if (!ping.ok) return res.status(200).json({ connected: false, message: 'Binance no disponible desde esta región' });
-
-    // Get Simple Earn flexible balance
-    const earnBal = await binanceGet('/sapi/v1/simple-earn/flexible/balance');
-    // Get account info
-    const account = await binanceGet('/api/v3/account');
-    
-    return res.status(200).json({
-      connected: true,
-      simpleEarn: earnBal,
-      account: { balances: account.balances.filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0) },
-    });
+    // Try signed call directly - some public endpoints are geo-blocked but signed ones work
+    try {
+      // Get account info first (signed)
+      const account = await binanceGet('/api/v3/account');
+      // Get Simple Earn flexible balance
+      let earnBal = null;
+      try { earnBal = await binanceGet('/sapi/v1/simple-earn/flexible/balance'); } catch {}
+      
+      return res.status(200).json({
+        connected: true,
+        simpleEarn: earnBal,
+        account: { balances: account.balances.filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0) },
+      });
+    } catch (signedErr: any) {
+      return res.status(200).json({ connected: false, message: 'Binance conectada pero con error: ' + signedErr.message });
+    }
   } catch (err: any) {
     return res.status(200).json({ connected: false, error: err.message });
   }
