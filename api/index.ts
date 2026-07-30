@@ -245,6 +245,8 @@ async function sendPayPalPayout(recipientEmail: string, amountEur: number, note:
   });
   const data = await res.json() as any;
   if (!res.ok) throw new Error('PayPal error: ' + JSON.stringify(data));
+  const batch = data?.batch_header;
+  if (!batch?.payout_batch_id) throw new Error('PayPal no devolvió un payout_batch_id: ' + JSON.stringify(data));
   return data;
 }
 
@@ -274,8 +276,8 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
         try {
           const ppResult = await sendPayPalPayout(email, amt, description || 'Retiro InverGrow');
           const batchId = ppResult?.batch_header?.payout_batch_id || '';
-          txDesc = `PayPal Payout enviado a ${email} — Batch: ${batchId}`;
-          txStatus = 'COMPLETED';
+          txDesc = `PayPal Payout aceptado para ${email} — Batch: ${batchId}. PayPal lo está procesando.`;
+          txStatus = 'PROCESSING';
         } catch (ppErr: any) {
           txDesc = `PayPal error: ${ppErr.message}. El saldo NO se ha descontado. Puedes reintentarlo.`;
           txStatus = 'FAILED';
@@ -320,7 +322,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       const newWithdrawals = parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2));
       await patchState({ balance: newBalance, total_withdrawals: newWithdrawals });
     }
-    await supa('invergrow_transactions', {
+    const txInsert = await supa('invergrow_transactions', {
       method: 'POST',
       body: JSON.stringify({
         type: 'WITHDRAWAL', amount: amt, status: txStatus,
