@@ -503,10 +503,10 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [amount, setAmount]     = useState('');
   const [desc, setDesc]         = useState('');
   const [loading, setLoading]   = useState(false);
-  const [method, setMethod]     = useState<'paypal' | 'bizum' | 'tarjeta' | 'bank'>('paypal');
+  const [method, setMethod]     = useState<'paypal' | 'bizum' | 'iban' | 'tarjeta'>('paypal');
   const [phone, setPhone]       = useState('');
+  const [iban, setIban]         = useState('');
   const [cardNumber, setCardNumber] = useState('');
-  const [iban, setIban]           = useState('');
   const [cardHolder, setCardHolder] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -515,17 +515,17 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
     if (!amt || amt <= 0) { showToast('error','Introduce un importe válido.'); return; }
     if (amt > state.balance) { showToast('error',`Saldo insuficiente. Disponible: €${fmt(state.balance)}`); return; }
     if (method === 'bizum' && !phone.trim()) { showToast('error','Introduce tu número de teléfono para Bizum.'); return; }
-    if (method === 'bank' && !iban.trim()) { showToast('error','Introduce tu IBAN.'); return; }
+    if (method === 'iban' && !iban.trim()) { showToast('error','Introduce tu IBAN.'); return; }
     if (method === 'tarjeta' && (!cardNumber.trim() || !cardHolder.trim())) { showToast('error','Introduce los datos de la tarjeta.'); return; }
     setLoading(true);
     try {
       const payload: any = { amount: amt, method, note: desc || `Retiro de €${amt}` };
       if (method === 'bizum') payload.phoneNumber = phone;
-      else if (method === 'bank') { payload.iban = iban.trim(); }
+      else if (method === 'iban') payload.iban = iban;
       else if (method === 'tarjeta') { payload.cardNumber = cardNumber.replace(/\s/g,''); payload.accountHolder = cardHolder; }
       else { payload.recipientEmail = 'joanlazaro83@gmail.com'; }
       await onWithdraw(payload);
-      setAmount(''); setDesc(''); setPhone(''); setCardNumber(''); setCardHolder(''); setIban('');
+      setAmount(''); setDesc(''); setPhone(''); setIban(''); setCardNumber(''); setCardHolder('');
     } catch (err: any) {
       showToast('error', err.message || 'Error al procesar el retiro');
     } finally {
@@ -553,10 +553,14 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
             <div className="flex items-start gap-3">
               <Shield className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#00d4ff' }} />
               <div>
-                <p className="text-xs font-bold text-white">Retiros por {method === 'bizum' ? 'Bizum' : 'PayPal'}</p>
+                <p className="text-xs font-bold text-white">Retiros por {method === 'bizum' ? 'Bizum' : method === 'iban' ? 'IBAN' : method === 'tarjeta' ? 'Tarjeta' : 'PayPal'}</p>
                 <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
                   {method === 'bizum'
                     ? 'Los retiros por Bizum se registran para procesamiento manual. Te llegará la notificación al móvil.'
+                    : method === 'iban'
+                    ? 'Los retiros por IBAN se procesan como transferencia bancaria SEPA.'
+                    : method === 'tarjeta'
+                    ? 'Los retiros se procesan directamente a tu tarjeta de débito/crédito.'
                     : 'Los retiros se procesan a tu cuenta de PayPal vinculada.'}
                 </p>
               </div>
@@ -572,12 +576,12 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
               <div>
                 <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Importe (€)</label>
                 <input type="number" placeholder="0.00" value={amount} onChange={e=>setAmount(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl text-sm font-mono text-white outline-none transition-all"
+                  className="w-full px-5 py-4 rounded-2xl text-lg font-mono text-white outline-none transition-all"
                   style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} min="1" step="0.01" />
                 <div className="flex gap-2 mt-2">
                   {[50,100,250,500].map(p => (
                     <button key={p} type="button" onClick={() => setAmount(String(p))}
-                      className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                      className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
                       style={{ background: amount===String(p) ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: amount===String(p) ? '#00ff88' : 'rgba(255,255,255,0.4)' }}>
                       €{p}
                     </button>
@@ -587,29 +591,29 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
               <div>
                 <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Concepto (opcional)</label>
                 <input type="text" placeholder="Ej: Retiro mensual" value={desc} onChange={e=>setDesc(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                  className="w-full px-5 py-4 rounded-2xl text-lg text-white outline-none transition-all"
                   style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
               </div>
               <div>
                 <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Método de retiro</label>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setMethod('paypal')}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'paypal' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    className={`flex-1 py-4 rounded-xl text-sm font-bold transition-all ${method === 'paypal' ? 'ring-2 ring-[#00ff88]' : ''}`}
                     style={{ background: method==='paypal' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='paypal' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
                     PayPal
                   </button>
                   <button type="button" onClick={() => setMethod('bizum')}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'bizum' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    className={`flex-1 py-4 rounded-xl text-sm font-bold transition-all ${method === 'bizum' ? 'ring-2 ring-[#00ff88]' : ''}`}
                     style={{ background: method==='bizum' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='bizum' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
                     Bizum
                   </button>
-                  <button type="button" onClick={() => setMethod('bank')}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'bank' ? 'ring-2 ring-[#00ff88]' : ''}`}
-                    style={{ background: method==='bank' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='bank' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
+                  <button type="button" onClick={() => setMethod('iban')}
+                    className={`flex-1 py-4 rounded-xl text-sm font-bold transition-all ${method === 'iban' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    style={{ background: method==='iban' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='iban' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
                     IBAN
                   </button>
                   <button type="button" onClick={() => setMethod('tarjeta')}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${method === 'tarjeta' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    className={`flex-1 py-4 rounded-xl text-sm font-bold transition-all ${method === 'tarjeta' ? 'ring-2 ring-[#00ff88]' : ''}`}
                     style={{ background: method==='tarjeta' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='tarjeta' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
                     Tarjeta
                   </button>
@@ -619,38 +623,38 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                 <div>
                   <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Tu número de teléfono</label>
                   <input type="tel" placeholder="+34 6XX XXX XXX" value={phone} onChange={e=>setPhone(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                    className="w-full px-5 py-4 rounded-2xl text-lg text-white outline-none transition-all"
                     style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
                 </div>
               )}
-              {method === 'bank' && (
+              {method === 'iban' && (
                 <div>
                   <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Tu IBAN</label>
                   <input type="text" placeholder="ESXX XXXX XXXX XXXX XXXX XXXX" value={iban} onChange={e=>setIban(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                    className="w-full px-5 py-4 rounded-2xl text-lg text-white outline-none transition-all font-mono"
                     style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
                 </div>
               )}
               {method === 'tarjeta' && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div>
                     <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Número de tarjeta</label>
-                    <input type="text" placeholder="1234 5678 9012 3456" value={cardNumber} onChange={e=>setCardNumber(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                    <input type="text" placeholder="XXXX XXXX XXXX XXXX" value={cardNumber} onChange={e=>setCardNumber(e.target.value)}
+                      className="w-full px-5 py-4 rounded-2xl text-lg text-white outline-none transition-all"
                       style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
                   </div>
                   <div>
                     <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Titular de la tarjeta</label>
                     <input type="text" placeholder="Nombre y apellidos" value={cardHolder} onChange={e=>setCardHolder(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                      className="w-full px-5 py-4 rounded-2xl text-lg text-white outline-none transition-all"
                       style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
                   </div>
                 </div>
               )}
               <button type="submit" disabled={loading}
-                className="w-full py-3.5 rounded-xl text-sm font-black transition-all disabled:opacity-40"
+                className="w-full py-5 rounded-2xl text-lg font-black transition-all disabled:opacity-40"
                 style={{ background:'linear-gradient(135deg,#00ff88,#00c4aa)', color:'#040608' }}>
-                {loading ? 'Procesando...' : `Solicitar Retiro por ${method === 'bizum' ? 'Bizum' : 'PayPal'}`}
+                {loading ? 'Procesando...' : `Solicitar Retiro por ${method === 'bizum' ? 'Bizum' : method === 'iban' ? 'IBAN' : method === 'tarjeta' ? 'Tarjeta' : 'PayPal'}`}
               </button>
             </form>
           </Card>
@@ -1010,7 +1014,7 @@ export default function App() {
     balance: 0, investedCapital: 0, totalWithdrawals: 0,
     reinvestmentFund: 0, netGains: 0,
     collaborators: [], transactions: [], webhookLogs: [], aiWorkers: [], aiLogs: [],
-    apiConfig: { geminiConnected:false, distributionWebhook:'', targetMarket:'', payoutModel:'SPLIT_50_50' }
+    apiConfig: { geminiConnected:false, distributionWebhook:'', targetMarket:'', payoutModel:'SPLIT_70_30' }
   });
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
