@@ -504,6 +504,12 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [desc, setDesc]         = useState('');
   const [loading, setLoading]   = useState(false);
   const [method, setMethod]     = useState<'paypal' | 'bizum' | 'iban' | 'tarjeta'>('paypal');
+  const [paypalEmail, setPaypalEmail] = useState(() => {
+    try { return localStorage.getItem('invergrow_paypal_email') || ''; } catch { return ''; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('invergrow_paypal_email', paypalEmail); } catch {}
+  }, [paypalEmail]);
   const [phone, setPhone]       = useState('');
   const [iban, setIban]         = useState('');
   const [cardNumber, setCardNumber] = useState('');
@@ -514,6 +520,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { showToast('error','Introduce un importe válido.'); return; }
     if (amt > state.balance) { showToast('error',`Saldo insuficiente. Disponible: €${fmt(state.balance)}`); return; }
+    if (method === 'paypal' && (!paypalEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail.trim()))) { showToast('error','Introduce un correo PayPal válido.'); return; }
     if (method === 'bizum' && !phone.trim()) { showToast('error','Introduce tu número de teléfono para Bizum.'); return; }
     if (method === 'iban' && !iban.trim()) { showToast('error','Introduce tu IBAN.'); return; }
     if (method === 'tarjeta' && (!cardNumber.trim() || !cardHolder.trim())) { showToast('error','Introduce los datos de la tarjeta.'); return; }
@@ -523,7 +530,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
       if (method === 'bizum') payload.phoneNumber = phone;
       else if (method === 'iban') payload.iban = iban;
       else if (method === 'tarjeta') { payload.cardNumber = cardNumber.replace(/\s/g,''); payload.accountHolder = cardHolder; }
-      else { payload.recipientEmail = 'joanlazaro83@gmail.com'; }
+      else { payload.paypalEmail = paypalEmail.trim(); }
       await onWithdraw(payload);
       setAmount(''); setDesc(''); setPhone(''); setIban(''); setCardNumber(''); setCardHolder('');
     } catch (err: any) {
@@ -545,7 +552,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                 €{fmt(state.balance)}
               </p>
               <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                {method === 'paypal' ? 'PayPal · joanlazaro83@gmail.com' : 
+                {method === 'paypal' ? `PayPal · ${paypalEmail || 'Sin cuenta configurada'}` : 
                  method === 'bizum' ? `Bizum · ${phone || 'Sin teléfono'}` : 
                  method === 'iban' ? `IBAN · ${iban || 'Sin IBAN'}` : 
                  `Tarjeta · ${cardNumber || 'Sin tarjeta'}`}
@@ -624,6 +631,15 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                   </button>
                 </div>
               </div>
+              {method === 'paypal' && (
+                <div className="rounded-2xl p-4" style={{ background:'rgba(0,212,255,0.06)', border:'1px solid rgba(0,212,255,0.2)' }}>
+                  <label className="text-xs mb-1.5 block font-bold" style={{ color: '#00d4ff' }}>Cuenta de PayPal de destino</label>
+                  <input type="email" placeholder="tu-correo@paypal.com" value={paypalEmail} onChange={e=>setPaypalEmail(e.target.value)}
+                    className="w-full px-5 py-4 rounded-2xl text-lg text-white outline-none transition-all"
+                    style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)' }} />
+                  <p className="text-xs mt-2" style={{ color:'rgba(255,255,255,0.45)' }}>El retiro se enviará a este correo. Se guardará para la próxima vez.</p>
+                </div>
+              )}
               {method === 'bizum' && (
                 <div>
                   <label className="text-xs mb-1.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Tu número de teléfono</label>
