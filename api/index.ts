@@ -362,10 +362,12 @@ async function handleIncome(req: VercelRequest, res: VercelResponse) {
     const ref = 'INC-' + Date.now().toString(36).toUpperCase();
     await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({ type: 'DEPOSIT', status: 'COMPLETED', amount: amt, description: description || ('Ingreso: ' + source), reference: ref, gateway: source }) });
     const state = await getState();
-    const newBalance = parseFloat(state.balance) + amt;
-    const newNetGains = parseFloat(state.net_gains) + amt;
+    // Los ingresos nuevos se acumulan como ganancias netas.
+    // Solo pasan al saldo retirable cuando Joan pulsa 'Transferir ganancias netas'.
+    const newBalance = parseFloat((state.balance || 0).toFixed(2));
+    const newNetGains = parseFloat((parseFloat(state.net_gains) + amt).toFixed(2));
     await patchState({ balance: newBalance, net_gains: newNetGains });
-    return res.status(200).json({ success: true, balance: newBalance, reference: ref });
+    return res.status(200).json({ success: true, balance: newBalance, netGains: newNetGains, reference: ref });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
@@ -685,8 +687,9 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
     else { amount = parseFloat(body.amount || body.data?.amount || 0); description = `Webhook: ${event}${amount > 0 ? ` — €${amount.toFixed(2)}` : ''}`; }
     if (amount > 0) {
       const state = await getState();
-      const newBalance = parseFloat(state.balance) + amount;
-      const newNetGains = parseFloat(state.net_gains) + amount;
+      // Los ingresos de webhooks también quedan primero como ganancias netas.
+      const newBalance = parseFloat((state.balance || 0).toFixed(2));
+      const newNetGains = parseFloat((parseFloat(state.net_gains) + amount).toFixed(2));
       await patchState({ balance: newBalance, net_gains: newNetGains });
       await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({ type: 'WEBHOOK_INCOME', status: 'COMPLETED', amount, description, reference: `WH-${Date.now().toString(36).toUpperCase()}`, gateway: source }) });
     }
