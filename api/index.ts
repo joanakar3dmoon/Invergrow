@@ -223,7 +223,7 @@ function getUpgradeCost(worker: any): number {
 // ─── handleData ──────────────────────────────────────────────────────────────
 async function handleData(req: VercelRequest, res: VercelResponse) {
   const st = await getState();
-  const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=20');
+  const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=1000');
   const rawTx = Array.isArray(txArr) ? txArr : [];
   const transactions = rawTx.map((t: any) => ({
     id: t.id, type: t.type || 'DEPOSIT', status: t.status || 'COMPLETED',
@@ -301,7 +301,7 @@ async function sendPayPalPayout(recipientEmail: string, amountEur: number, note:
 async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     const state = await getState();
-    const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=20');
+    const txArr = await supa('invergrow_transactions?select=*&order=created_at.desc&limit=1000');
     return res.status(200).json({ balance: parseFloat(state.balance) || 0, netGains: parseFloat(state.net_gains) || 0, totalWithdrawals: parseFloat(state.total_withdrawals) || 0, transactions: Array.isArray(txArr) ? txArr : [] });
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
