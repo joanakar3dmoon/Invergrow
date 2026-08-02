@@ -233,12 +233,19 @@ async function handleData(req: VercelRequest, res: VercelResponse) {
   const hasGemini = !!(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 10);
   const hasPayPal = !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_ID !== 'PENDIENTE');
   const aiWorkers = await getWorkers(st);
+  // Preserve all historical bot entries, but expose them separately until an
+  // external provider reference (payment/webhook/order id) verifies the origin.
+  const unverifiedIncome = rawTx
+    .filter((t: any) => t.type === 'AI_REVENUE' || t.type === 'AI_PAPER_REVENUE')
+    .reduce((sum: number, t: any) => sum + (parseFloat(t.amount) || 0), 0);
+  const verifiedNetGains = parseFloat(st.net_gains) || 0;
   return res.status(200).json({
     balance: parseFloat(st.balance) || 0,
     netGains: parseFloat(st.net_gains) || 0,
     investedCapital: parseFloat(st.invested_capital) || 0,
     totalWithdrawals: parseFloat(st.total_withdrawals) || 0,
     reinvestmentFund: 0,
+    verifiedNetGains, unverifiedIncome: parseFloat(unverifiedIncome.toFixed(2)),
     collaborators: [], transactions, webhookLogs: [], aiWorkers, aiLogs: [],
     apiConfig: { geminiConnected: hasGemini, paypalConnected: hasPayPal, paypalEnv: process.env.PAYPAL_ENV || 'live', supabaseConnected: !!SUPABASE_KEY, distributionWebhook: '', targetMarket: 'ES', payoutModel: 'SPLIT_50_50' },
     lastUpdated: new Date().toISOString(), version: '4.3',
