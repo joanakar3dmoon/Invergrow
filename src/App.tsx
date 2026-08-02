@@ -173,6 +173,7 @@ function DashboardTab({ state }: { state: SystemState }) {
         <StatCard icon={<ArrowUpRight />} label="Total Retirado"     value={state.totalWithdrawals}  sub="A PayPal real"            color="#f59e0b" />
         <StatCard icon={<Zap />}          label="Ganancias Netas"    value={state.netGains}          sub="Ingresos verificados"       color="#a855f7" />
         <StatCard icon={<Activity />}     label="Rendimiento Paper"   value={(state as any).paperGains || 0} sub="Estimación no retirable" color="#f97316" />
+        <StatCard icon={<AlertCircle />}  label="Ingresos sin verificar" value={(state as any).unverifiedIncome || 0} sub="Histórico, origen pendiente" color="#f59e0b" />
       </div>
 
       {/* Workers en acción */}
@@ -425,7 +426,7 @@ function WorkersTab() {
     { id: 'youtube',   name: 'YouTube @Equilibrio', icon: '🎬', color: '#ff4444', bg: 'rgba(255,68,68,0.1)', revenue: 0.15, label: 'Ingresos reales por monetización' },
     { id: 'admob',     name: 'AdMob (Lanzarus)',    icon: '📱', color: '#00d4ff', bg: 'rgba(0,212,255,0.1)', revenue: 0.001, label: 'Anuncios en apps' },
     
-    { id: 'manual',    name: 'Aportaciones directas', icon: '💶', color: '#00ff88', bg: 'rgba(0,255,136,0.1)', revenue: 50, label: 'Ingresos manuales' },
+    { id: 'manual',    name: 'Aportaciones directas', icon: '💶', color: '#00ff88', bg: 'rgba(0,255,136,0.1)', revenue: 0, label: 'Se mostrará tras confirmación Stripe Live' },
   ];
 
   if (loading) return <div className="flex items-center justify-center py-20"><RefreshCw className="w-6 h-6 animate-spin" style={{color:'rgba(255,255,255,0.3)'}}/></div>;
@@ -437,11 +438,11 @@ function WorkersTab() {
       {/* Total Hero */}
       <Card>
         <div className="text-center py-6">
-          <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>INGRESOS TOTALES REALES</p>
+          <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>INGRESOS CONFIRMADOS</p>
           <p className="text-5xl font-black" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
             €{fmt(totalReal)}
           </p>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Datos reales desde YouTube, AdMob</p>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Solo cobros verificados por el proveedor</p>
         </div>
       </Card>
 
