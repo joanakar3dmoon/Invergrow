@@ -1,0 +1,11 @@
+name: InverGrow paper worker
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute paper cycle
+        run: curl --fail --silent --show-error https://invergrow.vercel.app/api/worker-cycle
