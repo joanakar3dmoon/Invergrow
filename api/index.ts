@@ -72,6 +72,7 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
     const now = new Date().toISOString();
     const active = workers.filter((w: any) => w.status === 'ACTIVE' && w.unlocked !== false);
     const cycles: any[] = [];
+    let cycleTotal = 0;
     for (const worker of active) {
       const invested = Math.max(0, parseFloat(state.invested_capital) || 0);
       const rate = Math.max(0, parseFloat(worker.baseIncomeRate) || 0);
@@ -82,11 +83,13 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
         description: `${worker.name}: €${estimate.toFixed(2)} estimados (paper, no retirable)`,
         reference: ref, gateway: 'PAPER_AI_ENGINE', created_at: now,
       }) });
+      cycleTotal += estimate;
       worker.totalGenerated = parseFloat(((parseFloat(worker.totalGenerated) || 0) + estimate).toFixed(2));
       worker.lastRun = now;
       cycles.push({ worker: worker.name, estimate, reference: ref });
     }
-    if (active.length) await patchState({ workers: JSON.stringify(workers), last_worker_cycle: now });
+    const paperGains = parseFloat(((parseFloat(state.paper_gains) || 0) + cycleTotal).toFixed(2));
+    if (active.length) await patchState({ workers: JSON.stringify(workers), paper_gains: paperGains, last_worker_cycle: now });
     return res.status(200).json({ ok: true, mode: 'paper', executedAt: now, workers: cycles,
       message: 'Ciclo ejecutado en paper; no se ha añadido dinero al balance.' });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
