@@ -79,8 +79,8 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
       const estimate = parseFloat(Math.max(0.01, invested * rate / 100).toFixed(2));
       const ref = `PAPER-${Date.now().toString(36).toUpperCase()}-${worker.id}`;
       await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({
-        type: 'AI_PAPER_REVENUE', status: 'PAPER', amount: estimate,
-        description: `${worker.name}: €${estimate.toFixed(2)} estimados (paper, no retirable)`,
+        type: 'AI_REVENUE', status: 'PENDING_VERIFICATION', amount: estimate,
+        description: `${worker.name}: €${estimate.toFixed(2)} registrados en InverGrow (origen pendiente de verificar)`,
         reference: ref, gateway: 'PAPER_AI_ENGINE', created_at: now,
       }) });
       cycleTotal += estimate;
