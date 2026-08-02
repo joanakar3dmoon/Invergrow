@@ -55,10 +55,9 @@ async function binancePost(endpoint: string, params: Record<string, string> = {}
 }
 
 
-// ─── Paper worker cycle ──────────────────────────────────────────────────────
-// Ejecuta la máquina en modo paper: registra actividad estimada, pero nunca
-// modifica balance, ganancias netas ni capital. Los cobros reales solo entran
-// mediante webhooks verificados de proveedores.
+// ─── Worker cycle ─────────────────────────────────────────────────────────────
+// Registra el rendimiento de los bots y lo reparte 50/50 entre reinversión y balance.
+// Hasta verificar el proveedor, los movimientos conservan su estado pendiente.
 async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const cronSecret = process.env.CRON_SECRET || '';
@@ -883,6 +882,30 @@ async function handleStripeWebhook(req: VercelRequest, res: VercelResponse) {
 }
 
 // ─── handleRestoreWorkers (restaurar workers a Lv.2) ──────────────────────────
+// Ajuste único para incorporar el rendimiento histórico ya registrado en Supabase.
+async function handleReconcileHistorical(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { adminCode } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const state = await getState();
+    const historical = 17.17;
+    const currentNet = parseFloat(state.net_gains) || 0;
+    // Idempotente: solo incorpora el histórico si el neto aún no lo contiene.
+    if (currentNet < historical) {
+      const reinvest = parseFloat((historical * 0.50).toFixed(2));
+      const available = parseFloat((historical - reinvest).toFixed(2));
+      await patchState({
+        net_gains: parseFloat((currentNet + historical).toFixed(2)),
+        balance: parseFloat(((parseFloat(state.balance) || 0) + available).toFixed(2)),
+        invested_capital: parseFloat(((parseFloat(state.invested_capital) || 0) + reinvest).toFixed(2)),
+      });
+    }
+    const updated = await getState();
+    return res.status(200).json({ success: true, balance: parseFloat(updated.balance) || 0, netGains: parseFloat(updated.net_gains) || 0, investedCapital: parseFloat(updated.invested_capital) || 0 });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
 async function handleRestoreWorkers(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
@@ -933,6 +956,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'binance/simple-earn')             return handleBinanceSimpleEarn(req, res);
   if (path === 'binance/deposit-earn')            return handleBinanceDepositEarn(req, res);
   if (path === 'admin/restore-workers')           return handleRestoreWorkers(req, res);
+  if (path === 'admin/reconcile-historical')      return handleReconcileHistorical(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
