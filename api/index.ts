@@ -88,10 +88,19 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
       worker.lastRun = now;
       cycles.push({ worker: worker.name, estimate, reference: ref });
     }
+    // Reparto solicitado: 50% se reinvierte y 50% pasa al balance.
+    // Se mantiene como pendiente de verificar hasta identificar el proveedor.
+    const reinvestShare = parseFloat((cycleTotal * 0.50).toFixed(2));
+    const balanceShare = parseFloat((cycleTotal - reinvestShare).toFixed(2));
+    const newBalance = parseFloat(((parseFloat(state.balance) || 0) + balanceShare).toFixed(2));
+    const newInvested = parseFloat(((parseFloat(state.invested_capital) || 0) + reinvestShare).toFixed(2));
+    const newNetGains = parseFloat(((parseFloat(state.net_gains) || 0) + cycleTotal).toFixed(2));
     const paperGains = parseFloat(((parseFloat(state.paper_gains) || 0) + cycleTotal).toFixed(2));
-    if (active.length) await patchState({ workers: JSON.stringify(workers), paper_gains: paperGains, last_worker_cycle: now });
-    return res.status(200).json({ ok: true, mode: 'paper', executedAt: now, workers: cycles,
-      message: 'Ciclo ejecutado en paper; no se ha añadido dinero al balance.' });
+    if (active.length) await patchState({ workers: JSON.stringify(workers), paper_gains: paperGains,
+      balance: newBalance, invested_capital: newInvested, net_gains: newNetGains, last_worker_cycle: now });
+    return res.status(200).json({ ok: true, mode: 'pending_verification', executedAt: now, workers: cycles,
+      generated: cycleTotal, reinvestShare, balanceShare, balance: newBalance, investedCapital: newInvested, netGains: newNetGains,
+      message: 'Ciclo ejecutado: 50% reinvertido y 50% añadido al balance; pendiente de verificar.' });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
