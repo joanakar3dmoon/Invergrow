@@ -54,6 +54,44 @@ async function binancePost(endpoint: string, params: Record<string, string> = {}
   return data;
 }
 
+
+// ─── Paper worker cycle ──────────────────────────────────────────────────────
+// Ejecuta la máquina en modo paper: registra actividad estimada, pero nunca
+// modifica balance, ganancias netas ni capital. Los cobros reales solo entran
+// mediante webhooks verificados de proveedores.
+async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const cronSecret = process.env.CRON_SECRET || '';
+  const auth = String(req.headers.authorization || '');
+  const isVercelCron = req.headers['x-vercel-cron'] === '1' || req.headers['x-vercel-cron'] === 'true';
+  if (cronSecret && auth !== `Bearer ${cronSecret}` && !isVercelCron) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const state = await getState();
+    const workers = await getWorkers(state);
+    const now = new Date().toISOString();
+    const active = workers.filter((w: any) => w.status === 'ACTIVE' && w.unlocked !== false);
+    const cycles: any[] = [];
+    for (const worker of active) {
+      const invested = Math.max(0, parseFloat(state.invested_capital) || 0);
+      const rate = Math.max(0, parseFloat(worker.baseIncomeRate) || 0);
+      const estimate = parseFloat(Math.max(0.01, invested * rate / 100).toFixed(2));
+      const ref = `PAPER-${Date.now().toString(36).toUpperCase()}-${worker.id}`;
+      await supa('invergrow_transactions', { method: 'POST', body: JSON.stringify({
+        type: 'AI_PAPER_REVENUE', status: 'PAPER', amount: estimate,
+        description: `${worker.name}: €${estimate.toFixed(2)} estimados (paper, no retirable)`,
+        reference: ref, gateway: 'PAPER_AI_ENGINE', created_at: now,
+      }) });
+      worker.totalGenerated = parseFloat(((parseFloat(worker.totalGenerated) || 0) + estimate).toFixed(2));
+      worker.lastRun = now;
+      cycles.push({ worker: worker.name, estimate, reference: ref });
+    }
+    if (active.length) await patchState({ workers: JSON.stringify(workers), last_worker_cycle: now });
+    return res.status(200).json({ ok: true, mode: 'paper', executedAt: now, workers: cycles,
+      message: 'Ciclo ejecutado en paper; no se ha añadido dinero al balance.' });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
 // ─── handleBinanceSimpleEarn ───────────────────────────────────────────────────
 async function handleBinanceSimpleEarn(req: VercelRequest, res: VercelResponse) {
   try {
@@ -856,6 +894,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = url.replace(/^\/api\/?/, '').split('?')[0];
 
   if (path === 'data'             || path === '') return handleData(req, res);
+  if (path === 'worker-cycle')                    return handleWorkerCycle(req, res);
   if (path === 'withdraw')                        return handleWithdraw(req, res);
   if (path === 'income')                          return handleIncome(req, res);
   if (path === 'reinvest')                        return handleReinvest(req, res);
