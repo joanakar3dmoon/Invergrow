@@ -36,11 +36,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/worker-cycle",
-      "schedule": "*/15 * * * *"
-    }
   ]
 }
