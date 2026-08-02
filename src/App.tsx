@@ -171,7 +171,8 @@ function DashboardTab({ state }: { state: SystemState }) {
         <StatCard icon={<Wallet />}       label="Saldo Disponible"   value={state.balance}          sub="↑ Actualizado en vivo"    color="#00ff88" />
         <StatCard icon={<Repeat />}       label="Capital Invertido"  value={state.investedCapital}  sub="En contenido y activos"   color="#00d4ff" />
         <StatCard icon={<ArrowUpRight />} label="Total Retirado"     value={state.totalWithdrawals}  sub="A PayPal real"            color="#f59e0b" />
-        <StatCard icon={<Zap />}          label="Ganancias Netas"    value={state.netGains}          sub="Histórico total"          color="#a855f7" />
+        <StatCard icon={<Zap />}          label="Ganancias Netas"    value={state.netGains}          sub="Ingresos verificados"       color="#a855f7" />
+        <StatCard icon={<Activity />}     label="Rendimiento Paper"   value={(state as any).paperGains || 0} sub="Estimación no retirable" color="#f97316" />
       </div>
 
       {/* Workers en acción */}
