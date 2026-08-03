@@ -501,7 +501,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
   const [amount, setAmount]     = useState('');
   const [desc, setDesc]         = useState('');
   const [loading, setLoading]   = useState(false);
-  const [method, setMethod]     = useState<'paypal' | 'bizum' | 'iban' | 'tarjeta'>('paypal');
+  const [method, setMethod]     = useState<'paypal' | 'bizum' | 'iban' | 'tarjeta' | 'stripe'>('paypal');
   const [paypalEmail, setPaypalEmail] = useState(() => {
     try { return localStorage.getItem('invergrow_paypal_email') || ''; } catch { return ''; }
   });
@@ -528,6 +528,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
       if (method === 'bizum') payload.phoneNumber = phone;
       else if (method === 'iban') payload.iban = iban;
       else if (method === 'tarjeta') { payload.cardNumber = cardNumber.replace(/\s/g,''); payload.accountHolder = cardHolder; }
+      else if (method === 'stripe') { payload.method = 'stripe'; }
       else { payload.paypalEmail = paypalEmail.trim(); }
       await onWithdraw(payload);
       setAmount(''); setDesc(''); setPhone(''); setIban(''); setCardNumber(''); setCardHolder('');
@@ -552,7 +553,8 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
               <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
                 {method === 'paypal' ? `PayPal · ${paypalEmail || 'Sin cuenta configurada'}` : 
                  method === 'bizum' ? `Bizum · ${phone || 'Sin teléfono'}` : 
-                 method === 'iban' ? `IBAN · ${iban || 'Sin IBAN'}` : 
+                 method === 'iban' ? `IBAN · ${iban || 'Sin IBAN'}` :
+                 method === 'stripe' ? 'Stripe Payouts · cuenta verificada' :
                  `Tarjeta · ${cardNumber || 'Sin tarjeta'}`}
               </p>
             </div>
@@ -563,12 +565,14 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
             <div className="flex items-start gap-3">
               <Shield className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#00d4ff' }} />
               <div>
-                <p className="text-xs font-bold text-white">Retiros por {method === 'bizum' ? 'Bizum' : method === 'iban' ? 'IBAN' : method === 'tarjeta' ? 'Tarjeta' : 'PayPal'}</p>
+                <p className="text-xs font-bold text-white">Retiros por {method === 'bizum' ? 'Bizum' : method === 'iban' ? 'IBAN' : method === 'stripe' ? 'Stripe Payouts' : method === 'tarjeta' ? 'Tarjeta' : 'PayPal'}</p>
                 <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
                   {method === 'bizum'
                     ? 'Los retiros por Bizum se registran para procesamiento manual. Te llegará la notificación al móvil.'
                     : method === 'iban'
                     ? 'Los retiros por IBAN se procesan como transferencia bancaria SEPA.'
+                    : method === 'stripe'
+                    ? 'Retiro mediante Stripe Payouts a la cuenta externa verificada en Stripe (SEPA o tarjeta elegible). Tú confirmas la solicitud.'
                     : method === 'tarjeta'
                     ? 'Los retiros se procesan directamente a tu tarjeta de débito/crédito.'
                     : 'Los retiros se procesan a tu cuenta de PayPal vinculada.'}
@@ -622,6 +626,11 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
                     style={{ background: method==='iban' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='iban' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
                     IBAN
                   </button>
+                  <button type="button" onClick={() => setMethod('stripe')}
+                    className={`flex-1 py-4 rounded-xl text-sm font-bold transition-all ${method === 'stripe' ? 'ring-2 ring-[#00ff88]' : ''}`}
+                    style={{ background: method==='stripe' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='stripe' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
+                    Stripe Payouts
+                  </button>
                   <button type="button" onClick={() => setMethod('tarjeta')}
                     className={`flex-1 py-4 rounded-xl text-sm font-bold transition-all ${method === 'tarjeta' ? 'ring-2 ring-[#00ff88]' : ''}`}
                     style={{ background: method==='tarjeta' ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.04)', color: method==='tarjeta' ? '#00ff88' : 'rgba(255,255,255,0.5)' }}>
@@ -673,7 +682,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
               <button type="submit" disabled={loading}
                 className="w-full py-5 rounded-2xl text-lg font-black transition-all disabled:opacity-40"
                 style={{ background:'linear-gradient(135deg,#00ff88,#00c4aa)', color:'#040608' }}>
-                {loading ? 'Procesando...' : `Solicitar Retiro por ${method === 'bizum' ? 'Bizum' : method === 'iban' ? 'IBAN' : method === 'tarjeta' ? 'Tarjeta' : 'PayPal'}`}
+                {loading ? 'Procesando...' : `Solicitar Retiro por ${method === 'bizum' ? 'Bizum' : method === 'iban' ? 'IBAN' : method === 'stripe' ? 'Stripe Payouts' : method === 'tarjeta' ? 'Tarjeta' : 'PayPal'}`}
               </button>
             </form>
           </Card>
@@ -1199,7 +1208,8 @@ export default function App() {
   }, []);
 
   const handleWithdraw = async (data: any) => {
-    const res = await fetch('/api/withdraw', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+    const endpoint = data.method === 'stripe' ? '/api/stripe-payout' : '/api/withdraw';
+    const res = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Error al procesar el retiro');
     await fetchState(true);
