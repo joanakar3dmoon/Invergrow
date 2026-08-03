@@ -758,12 +758,11 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
 async function handleStripePayout(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const { amount, adminCode, iban } = req.body || {};
+    const { amount, adminCode } = req.body || {};
     if (adminCode && adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: 'Importe inválido' });
     if (!STRIPE_SECRET_KEY) return res.status(400).json({ error: 'Stripe no configurado' });
-    if (!iban) return res.status(400).json({ error: 'IBAN requerido' });
 
     const state = await getState();
     const available = parseFloat((state.balance || 0).toFixed(2));
@@ -779,7 +778,6 @@ async function handleStripePayout(req: VercelRequest, res: VercelResponse) {
       body: new URLSearchParams({
         amount: String(Math.round(amt * 100)),
         currency: 'eur',
-        destination_type: 'bank_account',
         method: 'standard',
         statement_descriptor: 'INVERGROW',
       }),
@@ -837,12 +835,16 @@ async function handleCreateCheckout(req: VercelRequest, res: VercelResponse) {
       },
       body: new URLSearchParams({
         'mode': 'payment',
+        'payment_method_types[0]': 'card',
+        'payment_method_types[1]': 'sepa_debit',
         'success_url': successUrl || SITE_URL + '?payment=success',
         'cancel_url': cancelUrl || SITE_URL + '?payment=cancel',
         'line_items[0][price_data][currency]': 'eur',
         'line_items[0][price_data][product_data][name]': desc,
         'line_items[0][price_data][unit_amount]': String(amt * 100),
         'line_items[0][quantity]': '1',
+        'metadata[purpose]': 'invergrow_personal_deposit',
+        'metadata[owner_only]': 'true',
       }),
     });
     const data: any = await stripeRes.json();
