@@ -906,6 +906,27 @@ async function handleReconcileHistorical(req: VercelRequest, res: VercelResponse
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
+async function handleExcludeUnverified(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { adminCode } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const state = await getState();
+    // Keep all transactions intact; remove only the previously added unverified split
+    // from the three financial aggregates requested by the owner.
+    const unverifiedAdded = 17.17;
+    const reinvested = 8.59;
+    const available = 8.58;
+    await patchState({
+      balance: parseFloat(Math.max(0, (parseFloat(state.balance) || 0) - available).toFixed(2)),
+      net_gains: parseFloat(Math.max(0, (parseFloat(state.net_gains) || 0) - unverifiedAdded).toFixed(2)),
+      invested_capital: parseFloat(Math.max(0, (parseFloat(state.invested_capital) || 0) - reinvested).toFixed(2)),
+    });
+    const updated = await getState();
+    return res.status(200).json({ success: true, balance: updated.balance, netGains: updated.net_gains, investedCapital: updated.invested_capital });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
 async function handleRestoreWorkers(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
@@ -957,6 +978,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'binance/deposit-earn')            return handleBinanceDepositEarn(req, res);
   if (path === 'admin/restore-workers')           return handleRestoreWorkers(req, res);
   if (path === 'admin/reconcile-historical')      return handleReconcileHistorical(req, res);
+  if (path === 'admin/exclude-unverified')         return handleExcludeUnverified(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
