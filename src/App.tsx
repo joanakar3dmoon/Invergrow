@@ -173,7 +173,6 @@ function DashboardTab({ state }: { state: SystemState }) {
         <StatCard icon={<ArrowUpRight />} label="Total Retirado"     value={state.totalWithdrawals}  sub="A PayPal real"            color="#f59e0b" />
         <StatCard icon={<Zap />}          label="Ganancias Netas"    value={state.netGains}          sub="Ingresos verificados"       color="#a855f7" />
         <StatCard icon={<Activity />}     label="Rendimiento Paper"   value={(state as any).paperGains || 0} sub="Estimación no retirable" color="#f97316" />
-        <StatCard icon={<AlertCircle />}  label="Ingresos sin verificar" value={(state as any).unverifiedIncome || 0} sub="Histórico, origen pendiente" color="#f59e0b" />
       </div>
 
       {/* Workers en acción */}
