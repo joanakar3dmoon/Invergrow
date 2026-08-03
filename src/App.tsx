@@ -219,8 +219,6 @@ function DashboardTab({ state }: { state: SystemState }) {
           <div className="space-y-3">
             {[
               { label: 'AdSense (anuncios web)',      value: 'Pendiente de tráfico', color: '#00ff88', icon: <BarChart3 className="w-4 h-4"/> },
-              { label: 'YouTube ID',    value: '@Equilibrio-c2k',  color: '#ff4444', icon: <Youtube className="w-4 h-4"/> },
-              { label: 'YouTube (canal personal)',     value: 'Datos en pestaña YouTube', color: '#ef4444', icon: <Youtube className="w-4 h-4"/> },
             ].map((s, i) => (
               <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${s.color}10`, border: `1px solid ${s.color}20` }}>
@@ -423,7 +421,6 @@ function WorkersTab() {
   }, []);
 
   const workers = [
-    { id: 'youtube',   name: 'YouTube @Equilibrio', icon: '🎬', color: '#ff4444', bg: 'rgba(255,68,68,0.1)', revenue: 0.15, label: 'Ingresos reales por monetización' },
     { id: 'admob',     name: 'AdMob (Lanzarus)',    icon: '📱', color: '#00d4ff', bg: 'rgba(0,212,255,0.1)', revenue: 0.001, label: 'Anuncios en apps' },
     
     { id: 'manual',    name: 'Aportaciones directas', icon: '💶', color: '#00ff88', bg: 'rgba(0,255,136,0.1)', revenue: 0, label: 'Se mostrará tras confirmación Stripe Live' },
@@ -779,7 +776,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
                 {[
                   { label: 'Propietario',    value: 'Joan · r3dm' },
                   { label: 'PayPal retiros', value: 'joanlazaro83@gmail.com' },
-                  { label: 'Canal YouTube', value: '@Equilibrio-c2k' },
                   { label: 'GitHub',         value: 'joanakar3dmoon/Invergrow' },
                   { label: 'Vercel',         value: 'invergrow.vercel.app' },
                 ].map((r,i) => (
@@ -1129,7 +1125,7 @@ function InvestTab() {
         <div className="space-y-3 text-sm text-zinc-400">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-            <span>Tu inversión impulsa la creación de música, apps y contenido</span>
+
           </div>
           <div className="flex items-start gap-3">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
