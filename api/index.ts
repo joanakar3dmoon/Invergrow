@@ -906,6 +906,22 @@ async function handleReconcileHistorical(req: VercelRequest, res: VercelResponse
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
+async function handleRestoreRemovedToBalance(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { adminCode } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const state = await getState();
+    const restored = 17.17;
+    await patchState({
+      balance: parseFloat(((parseFloat(state.balance) || 0) + restored).toFixed(2)),
+      net_gains: parseFloat(((parseFloat(state.net_gains) || 0) + restored).toFixed(2)),
+    });
+    const updated = await getState();
+    return res.status(200).json({ success: true, restored, balance: updated.balance, netGains: updated.net_gains, investedCapital: updated.invested_capital });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
 async function handleExcludeUnverified(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
@@ -979,6 +995,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'admin/restore-workers')           return handleRestoreWorkers(req, res);
   if (path === 'admin/reconcile-historical')      return handleReconcileHistorical(req, res);
   if (path === 'admin/exclude-unverified')         return handleExcludeUnverified(req, res);
+  if (path === 'admin/restore-removed-to-balance')  return handleRestoreRemovedToBalance(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
