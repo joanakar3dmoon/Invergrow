@@ -833,14 +833,6 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
             <Card>
               <SectionHeader icon={<Zap />} title="Workers Reales" sub="Fuentes de ingreso activas" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
               <div className="space-y-4">
-                <div className="p-4 rounded-xl" style={{ background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.12)' }}>
-                  <p className="text-sm font-bold text-white mb-2">🎬 YouTube — @Equilibrio-c2k</p>
-                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Ingresos por monetización de vídeos. Datos desde la API de YouTube Analytics.</p>
-                  <div className="mt-2 flex gap-2">
-                    <span className="px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88' }}>€0.15 generados</span>
-                    <span className="px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}>5.110+ vídeos</span>
-                  </div>
-                </div>
                 <div className="p-4 rounded-xl" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.12)' }}>
                   <p className="text-sm font-bold text-white mb-2">📱 AdMob — Lanzarus / r3dm.guia / Nexusia</p>
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Ingresos por publicidad en las apps. Datos desde la API de Google AdMob.</p>
@@ -1155,11 +1147,10 @@ function InvestTab() {
 
 // APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
-type Tab = 'dashboard'|'youtube'|'workers'|'withdraw'|'admin'|'invest';
+type Tab = 'dashboard'|'workers'|'withdraw'|'admin'|'invest';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id:'dashboard', label:'Dashboard', icon:<BarChart3 className="w-4 h-4"/> },
-  { id:'youtube',   label:'YouTube',   icon:<Youtube className="w-4 h-4"/> },
   { id:'workers',   label:'Workers',   icon:<Zap className="w-4 h-4"/> },
   { id:'withdraw',  label:'Retiros',   icon:<Repeat className="w-4 h-4"/> },
   { id:'admin',     label:'Admin',     icon:<Settings className="w-4 h-4"/> },
@@ -1280,7 +1271,6 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.2}}>
               {activeTab==='dashboard' && <DashboardTab state={state} />}
-              {activeTab==='youtube'   && <YoutubeTab />}
               {activeTab==='workers'   && <WorkersTab />}
               {activeTab==='withdraw'  && <WithdrawTab state={state} onWithdraw={handleWithdraw} showToast={showToast} />}
               {activeTab==='admin'     && <AdminTab state={state} onAddCollaborator={handleAddCollaborator} showToast={showToast} />}
