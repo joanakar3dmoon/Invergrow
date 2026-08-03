@@ -799,7 +799,7 @@ async function handleStripePayout(req: VercelRequest, res: VercelResponse) {
         amount: amt,
         description: 'Retiro Stripe IBAN \u20ac' + amt.toFixed(2) + ' — ' + payoutData.id,
         reference: ref, gateway: 'STRIPE',
-        iban: iban.slice(0, 8) + '...',
+        payout_destination: 'stripe_verified_external_account',
       }),
     });
     await patchState({
