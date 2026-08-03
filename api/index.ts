@@ -906,6 +906,25 @@ async function handleReconcileHistorical(req: VercelRequest, res: VercelResponse
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
 
+async function handleMoveBotIncomeToBalance(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const { adminCode } = req.body || {};
+    if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+    const state = await getState();
+    const txArr = await supa('invergrow_transactions?select=*&type=in.(AI_REVENUE,AI_PAPER_REVENUE)&limit=5000');
+    const rows = Array.isArray(txArr) ? txArr : [];
+    const total = parseFloat(rows.reduce((n: number, t: any) => n + (parseFloat(t.amount) || 0), 0).toFixed(2));
+    if (total <= 0) return res.status(200).json({ success: true, moved: 0 });
+    // Preserve every transaction; only classify these bot records as confirmed internal income.
+    for (const t of rows) {
+      await supa(`invergrow_transactions?id=eq.${encodeURIComponent(t.id)}`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED', gateway: 'AMAZON_AFFILIATE_REINVESTED', description: `${t.description || 'Ingreso de bots'} — origen Amazon Afiliados, reinvertido en InverGrow` }) });
+    }
+    await patchState({ balance: total, net_gains: total });
+    return res.status(200).json({ success: true, moved: total, balance: total, netGains: total, investedCapital: parseFloat(state.invested_capital) || 0, transactions: rows.length });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
 async function handleRestoreRemovedToBalance(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
@@ -996,6 +1015,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (path === 'admin/reconcile-historical')      return handleReconcileHistorical(req, res);
   if (path === 'admin/exclude-unverified')         return handleExcludeUnverified(req, res);
   if (path === 'admin/restore-removed-to-balance')  return handleRestoreRemovedToBalance(req, res);
+  if (path === 'admin/move-bot-income-to-balance')   return handleMoveBotIncomeToBalance(req, res);
 
   return res.status(404).json({ error: `Ruta no encontrada: ${path}` });
 }
