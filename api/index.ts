@@ -325,6 +325,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
     let txStatus = 'COMPLETED';
     let txDesc = description || `Retiro ${method}`;
     let deductBalance = true;
+    let paypalBatchId = '';
 
     if (method === 'paypal') {
       const email = String(paypalEmail || '').trim();
@@ -335,7 +336,8 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
         try {
           const ppResult = await sendPayPalPayout(email, amt, description || 'Retiro InverGrow');
           const batchId = ppResult?.batch_header?.payout_batch_id || '';
-          txDesc = `PayPal Payout aceptado para ${email} — Batch: ${batchId}. PayPal lo está procesando.`;
+          paypalBatchId = batchId;
+          txDesc = `PayPal Payout aceptado para ${email} — Payout Batch ID: ${batchId}. PayPal lo está procesando.`;
           txStatus = 'PROCESSING';
         } catch (ppErr: any) {
           txDesc = `PayPal error: ${ppErr.message}. El saldo NO se ha descontado. Puedes reintentarlo.`;
@@ -385,7 +387,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       method: 'POST',
       body: JSON.stringify({
         type: 'WITHDRAWAL', amount: amt, status: txStatus,
-        reference: ref, description: txDesc, gateway: method.toUpperCase(),
+        reference: paypalBatchId || ref, description: txDesc, gateway: method.toUpperCase(),
         paypal_email: method === 'paypal' ? String(paypalEmail).trim() : null,
         iban: method === 'bank' ? iban : null,
         bank_name: bankName || null,
@@ -402,6 +404,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       newBalance: deductBalance ? parseFloat((available - amt).toFixed(2)) : available,
       totalWithdrawals: deductBalance ? parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2)) : state.total_withdrawals,
       status: txStatus,
+      payoutBatchId: paypalBatchId || null,
       message: txDesc,
     });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
