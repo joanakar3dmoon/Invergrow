@@ -535,7 +535,7 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
     if (idx === -1) return res.status(404).json({ error: 'Worker no encontrado' });
 
     const worker = workers[idx];
-    const cost = getUpgradeCost(worker);
+    const cost = worker.unlocked === false ? (parseFloat(worker.costToUnlock) || 0) : getUpgradeCost(worker);
     const balance = parseFloat(state.balance) || 0;
 
     if (balance < cost) {
@@ -545,14 +545,18 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Upgrade worker
-    const newLevel = (worker.level || 1) + 1;
-    const newCostToUpgrade = Math.round(cost * 1.5); // Next upgrade cost
+    // Unlock a locked worker, or upgrade an active worker.
+    const unlocking = worker.unlocked === false;
+    const newLevel = unlocking ? (worker.level || 1) : (worker.level || 1) + 1;
+    const newCostToUpgrade = unlocking ? (worker.costToUpgrade || 50) : Math.round(cost * 1.5);
     workers[idx] = {
       ...worker,
+      unlocked: true,
+      status: 'ACTIVE',
       level: newLevel,
+      costToUnlock: 0,
       costToUpgrade: newCostToUpgrade,
-      baseIncomeRate: parseFloat((worker.baseIncomeRate * 1.5).toFixed(4)),
+      baseIncomeRate: unlocking ? worker.baseIncomeRate : parseFloat((worker.baseIncomeRate * 1.5).toFixed(4)),
     };
 
     // Update state
@@ -566,10 +570,10 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
     await supa('invergrow_transactions', {
       method: 'POST',
       body: JSON.stringify({
-        type: 'WORKER_UPGRADE',
+        type: unlocking ? 'WORKER_UNLOCK' : 'WORKER_UPGRADE',
         status: 'COMPLETED',
         amount: cost,
-        description: `Upgrade ${worker.name} a Lv.${newLevel} — €${cost.toFixed(2)}`,
+        description: unlocking ? `Desbloqueo ${worker.name} — €${cost.toFixed(2)}` : `Upgrade ${worker.name} a Lv.${newLevel} — €${cost.toFixed(2)}`,
         reference: ref,
         gateway: 'INTERNAL',
       }),
@@ -586,7 +590,7 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
       baseIncomeRate: workers[idx].baseIncomeRate,
       nextUpgradeCost: newCostToUpgrade,
       reference: ref,
-      message: `✅ ${worker.name} subido a Lv.${newLevel} por €${cost.toFixed(2)}. Próximo upgrade: €${newCostToUpgrade}`,
+      message: unlocking ? `✅ ${worker.name} desbloqueado por €${cost.toFixed(2)} y activado. Próximo upgrade: €${newCostToUpgrade}` : `✅ ${worker.name} subido a Lv.${newLevel} por €${cost.toFixed(2)}. Próximo upgrade: €${newCostToUpgrade}`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
