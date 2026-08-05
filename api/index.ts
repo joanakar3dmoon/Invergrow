@@ -170,7 +170,6 @@ async function handleBinanceDepositEarn(req: VercelRequest, res: VercelResponse)
 }
 
 const ADMOB_APPS = [
-  { name: 'Lanzarus',  appId: 'ca-app-pub-4903263409458961~1005307516', color: '#00ff88' },
   { name: 'r3dm/guia', appId: 'ca-app-pub-4903263409458961~2391607033', color: '#00d4ff' },
   { name: 'Nexusia',   appId: 'ca-app-pub-4903263409458961~5751005760', color: '#a855f7' },
 ];
@@ -742,7 +741,7 @@ async function handleSync(req: VercelRequest, res: VercelResponse) {
       const lastIncome = await supa('invergrow_income?source=eq.admob&order=created_at.desc&limit=1');
       const lastAmt = lastIncome?.[0]?.amount || 0;
       if (Math.abs(admob.data.total_revenue - lastAmt) > 0.01) {
-        await fetch(`${BASE_URL}/api/income`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: parseFloat(admob.data.total_revenue.toFixed(2)), source: 'admob', description: `AdMob — Lanzarus + r3dm/guia + Nexusia` }) });
+        await fetch(`${BASE_URL}/api/income`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: parseFloat(admob.data.total_revenue.toFixed(2)), source: 'admob', description: `AdMob — r3dm/guia + Nexusia` }) });
       }
     }
   } catch (e: any) { results.admob = `error: ${e.message}`; }
