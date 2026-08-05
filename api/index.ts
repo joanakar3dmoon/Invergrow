@@ -59,6 +59,9 @@ async function binancePost(endpoint: string, params: Record<string, string> = {}
 // Registra el rendimiento de los bots y lo reparte 50/50 entre reinversión y balance.
 // Hasta verificar el proveedor, los movimientos conservan su estado pendiente.
 async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
+  // PAPER/AI worker income is permanently disabled: no simulated revenue or balances.
+  return res.status(410).json({ ok: false, disabled: true, mode: 'real_assets_only', message: 'Ciclos simulados desactivados. Conecta un bróker real para operar.' });
+  /*
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const cronSecret = process.env.CRON_SECRET || '';
   const auth = String(req.headers.authorization || '');
@@ -68,9 +71,6 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
   try {
     const state = await getState();
     const workers = await getWorkers(state);
-    if (state.cycle_enabled === false) {
-      return res.status(200).json({ ok: true, skipped: true, reason: 'Ciclos desactivados desde el panel', message: 'Ciclo omitido: los ciclos están en OFF.' });
-    }
     const now = new Date().toISOString();
     const active = workers.filter((w: any) => w.status === 'ACTIVE' && w.unlocked !== false);
     const cycles: any[] = [];
@@ -105,16 +105,7 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
       message: 'Ciclo ejecutado: 50% reinvertido y 50% añadido al balance; pendiente de verificar.' });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 }
-
-// ─── Control manual de ciclos ─────────────────────────────────────────────────
-async function handleCycleToggle(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { adminCode, enabled } = req.body || {};
-  if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
-  if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled debe ser booleano' });
-  await patchState({ cycle_enabled: enabled });
-  return res.status(200).json({ success: true, cycleEnabled: enabled, message: enabled ? 'Ciclos automáticos ACTIVADOS.' : 'Ciclos automáticos DESACTIVADOS.' });
-}
+  */
 
 // ─── handleBinanceSimpleEarn ───────────────────────────────────────────────────
 async function handleBinanceSimpleEarn(req: VercelRequest, res: VercelResponse) {
@@ -170,6 +161,7 @@ async function handleBinanceDepositEarn(req: VercelRequest, res: VercelResponse)
 }
 
 const ADMOB_APPS = [
+  { name: 'Lanzarus',  appId: 'ca-app-pub-4903263409458961~1005307516', color: '#00ff88' },
   { name: 'r3dm/guia', appId: 'ca-app-pub-4903263409458961~2391607033', color: '#00d4ff' },
   { name: 'Nexusia',   appId: 'ca-app-pub-4903263409458961~5751005760', color: '#a855f7' },
 ];
@@ -337,7 +329,6 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
     let txStatus = 'COMPLETED';
     let txDesc = description || `Retiro ${method}`;
     let deductBalance = true;
-    let paypalBatchId = '';
 
     if (method === 'paypal') {
       const email = String(paypalEmail || '').trim();
@@ -348,8 +339,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
         try {
           const ppResult = await sendPayPalPayout(email, amt, description || 'Retiro InverGrow');
           const batchId = ppResult?.batch_header?.payout_batch_id || '';
-          paypalBatchId = batchId;
-          txDesc = `PayPal Payout aceptado para ${email} — Payout Batch ID: ${batchId}. PayPal lo está procesando.`;
+          txDesc = `PayPal Payout aceptado para ${email} — Batch: ${batchId}. PayPal lo está procesando.`;
           txStatus = 'PROCESSING';
         } catch (ppErr: any) {
           txDesc = `PayPal error: ${ppErr.message}. El saldo NO se ha descontado. Puedes reintentarlo.`;
@@ -399,7 +389,7 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       method: 'POST',
       body: JSON.stringify({
         type: 'WITHDRAWAL', amount: amt, status: txStatus,
-        reference: paypalBatchId || ref, description: txDesc, gateway: method.toUpperCase(),
+        reference: ref, description: txDesc, gateway: method.toUpperCase(),
         paypal_email: method === 'paypal' ? String(paypalEmail).trim() : null,
         iban: method === 'bank' ? iban : null,
         bank_name: bankName || null,
@@ -416,7 +406,6 @@ async function handleWithdraw(req: VercelRequest, res: VercelResponse) {
       newBalance: deductBalance ? parseFloat((available - amt).toFixed(2)) : available,
       totalWithdrawals: deductBalance ? parseFloat(((state.total_withdrawals || 0) + amt).toFixed(2)) : state.total_withdrawals,
       status: txStatus,
-      payoutBatchId: paypalBatchId || null,
       message: txDesc,
     });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
@@ -547,7 +536,7 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
     if (idx === -1) return res.status(404).json({ error: 'Worker no encontrado' });
 
     const worker = workers[idx];
-    const cost = worker.unlocked === false ? (parseFloat(worker.costToUnlock) || 0) : getUpgradeCost(worker);
+    const cost = getUpgradeCost(worker);
     const balance = parseFloat(state.balance) || 0;
 
     if (balance < cost) {
@@ -557,18 +546,14 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Unlock a locked worker, or upgrade an active worker.
-    const unlocking = worker.unlocked === false;
-    const newLevel = unlocking ? (worker.level || 1) : (worker.level || 1) + 1;
-    const newCostToUpgrade = unlocking ? (worker.costToUpgrade || 50) : Math.round(cost * 1.5);
+    // Upgrade worker
+    const newLevel = (worker.level || 1) + 1;
+    const newCostToUpgrade = Math.round(cost * 1.5); // Next upgrade cost
     workers[idx] = {
       ...worker,
-      unlocked: true,
-      status: 'ACTIVE',
       level: newLevel,
-      costToUnlock: 0,
       costToUpgrade: newCostToUpgrade,
-      baseIncomeRate: unlocking ? worker.baseIncomeRate : parseFloat((worker.baseIncomeRate * 1.5).toFixed(4)),
+      baseIncomeRate: parseFloat((worker.baseIncomeRate * 1.5).toFixed(4)),
     };
 
     // Update state
@@ -582,10 +567,10 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
     await supa('invergrow_transactions', {
       method: 'POST',
       body: JSON.stringify({
-        type: unlocking ? 'WORKER_UNLOCK' : 'WORKER_UPGRADE',
+        type: 'WORKER_UPGRADE',
         status: 'COMPLETED',
         amount: cost,
-        description: unlocking ? `Desbloqueo ${worker.name} — €${cost.toFixed(2)}` : `Upgrade ${worker.name} a Lv.${newLevel} — €${cost.toFixed(2)}`,
+        description: `Upgrade ${worker.name} a Lv.${newLevel} — €${cost.toFixed(2)}`,
         reference: ref,
         gateway: 'INTERNAL',
       }),
@@ -602,7 +587,7 @@ async function handleUpgradeWorker(req: VercelRequest, res: VercelResponse) {
       baseIncomeRate: workers[idx].baseIncomeRate,
       nextUpgradeCost: newCostToUpgrade,
       reference: ref,
-      message: unlocking ? `✅ ${worker.name} desbloqueado por €${cost.toFixed(2)} y activado. Próximo upgrade: €${newCostToUpgrade}` : `✅ ${worker.name} subido a Lv.${newLevel} por €${cost.toFixed(2)}. Próximo upgrade: €${newCostToUpgrade}`,
+      message: `✅ ${worker.name} subido a Lv.${newLevel} por €${cost.toFixed(2)}. Próximo upgrade: €${newCostToUpgrade}`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -741,7 +726,7 @@ async function handleSync(req: VercelRequest, res: VercelResponse) {
       const lastIncome = await supa('invergrow_income?source=eq.admob&order=created_at.desc&limit=1');
       const lastAmt = lastIncome?.[0]?.amount || 0;
       if (Math.abs(admob.data.total_revenue - lastAmt) > 0.01) {
-        await fetch(`${BASE_URL}/api/income`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: parseFloat(admob.data.total_revenue.toFixed(2)), source: 'admob', description: `AdMob — r3dm/guia + Nexusia` }) });
+        await fetch(`${BASE_URL}/api/income`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: parseFloat(admob.data.total_revenue.toFixed(2)), source: 'admob', description: `AdMob — Lanzarus + r3dm/guia + Nexusia` }) });
       }
     }
   } catch (e: any) { results.admob = `error: ${e.message}`; }
@@ -818,7 +803,7 @@ async function handleStripePayout(req: VercelRequest, res: VercelResponse) {
         amount: amt,
         description: 'Retiro Stripe IBAN \u20ac' + amt.toFixed(2) + ' — ' + payoutData.id,
         reference: ref, gateway: 'STRIPE',
-        payout_destination: 'stripe_verified_external_account',
+        iban: iban.slice(0, 8) + '...',
       }),
     });
     await patchState({
@@ -1014,7 +999,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (path === 'data'             || path === '') return handleData(req, res);
   if (path === 'worker-cycle')                    return handleWorkerCycle(req, res);
-  if (path === 'cycle-toggle')                    return handleCycleToggle(req, res);
   if (path === 'withdraw')                        return handleWithdraw(req, res);
   if (path === 'income')                          return handleIncome(req, res);
   if (path === 'reinvest')                        return handleReinvest(req, res);
