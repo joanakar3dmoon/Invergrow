@@ -254,7 +254,7 @@ function DashboardTab({ state }: { state: SystemState }) {
 
           <div className="mt-4 p-3 rounded-xl" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.12)' }}>
             <p className="text-xs" style={{ color: '#00ff88' }}>
-              ⚡ Los balances solo se actualizan con ingresos reales. Usa la pestaña <strong>Amazon</strong> para buscar productos y generar comisiones de afiliado.
+              ⚡ Los balances solo se actualizan con ingresos reales. Usa las fuentes conectadas para registrar únicamente ingresos reales confirmados.
             </p>
           </div>
         </Card>
@@ -441,7 +441,7 @@ function WorkersTab() {
   }, []);
 
   const workers = [
-    { id: 'admob',     name: 'AdMob (Lanzarus)',    icon: '📱', color: '#00d4ff', bg: 'rgba(0,212,255,0.1)', revenue: 0.001, label: 'Anuncios en apps' },
+    { id: 'admob',     name: 'AdMob (r3dm/guia + Nexusia)', icon: '📱', color: '#00d4ff', bg: 'rgba(0,212,255,0.1)', revenue: 0.001, label: 'Anuncios en apps' },
     
     { id: 'manual',    name: 'Aportaciones directas', icon: '💶', color: '#00ff88', bg: 'rgba(0,255,136,0.1)', revenue: 0, label: 'Se mostrará tras confirmación Stripe Live' },
   ];
@@ -859,7 +859,7 @@ function AdminTab({ state, onAddCollaborator, showToast }: any) {
               <SectionHeader icon={<Zap />} title="Workers Reales" sub="Fuentes de ingreso activas" iconColor="#00d4ff" iconBg="rgba(0,212,255,0.1)" />
               <div className="space-y-4">
                 <div className="p-4 rounded-xl" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.12)' }}>
-                  <p className="text-sm font-bold text-white mb-2">📱 AdMob — Lanzarus / r3dm.guia / Nexusia</p>
+                  <p className="text-sm font-bold text-white mb-2">📱 AdMob — r3dm.guia / Nexusia</p>
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Ingresos por publicidad en las apps. Datos desde la API de Google AdMob.</p>
                   <div className="mt-2 flex gap-2">
                     <span className="px-2 py-1 rounded text-xs" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88' }}>3 apps activas</span>
