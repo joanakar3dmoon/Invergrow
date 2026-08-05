@@ -159,6 +159,24 @@ function ProgressBar({ value, max, color = '#00ff88' }: { value: number; max: nu
   );
 }
 
+
+function CycleSwitch({ enabled }: { enabled: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [on, setOn] = useState(enabled);
+  useEffect(() => setOn(enabled), [enabled]);
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      const next = !on;
+      const r = await fetch('/api/cycle-toggle', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ adminCode:'joan123', enabled: next }) });
+      const d = await r.json();
+      if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo cambiar');
+      setOn(next);
+    } catch (e) { console.error(e); } finally { setBusy(false); }
+  };
+  return <button onClick={toggle} disabled={busy} title="Activar o desactivar ciclos automáticos" className="shrink-0 px-3 py-2 rounded-xl text-xs font-black transition-all disabled:opacity-50" style={{ background: on ? 'rgba(0,255,136,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${on ? 'rgba(0,255,136,0.35)' : 'rgba(239,68,68,0.35)'}`, color: on ? '#00ff88' : '#ef4444' }}>● {on ? 'ON' : 'OFF'}</button>;
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 1 — DASHBOARD
 // ══════════════════════════════════════════════════════════════════════════════
@@ -177,7 +195,10 @@ function DashboardTab({ state }: { state: SystemState }) {
 
       {/* Workers en acción */}
       <Card>
-        <SectionHeader icon={<Sparkles />} title="🤖 Workers Activos" sub="Generando ingresos cada hora" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <SectionHeader icon={<Sparkles />} title="🤖 Workers Activos" sub="Generando ingresos cada hora" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+          <CycleSwitch enabled={(state as any).cycleEnabled !== false} />
+        </div>
         <div className="space-y-3">
           {[0,1,2].map(i => {
             const w = (state as any).aiWorkers?.[i];
