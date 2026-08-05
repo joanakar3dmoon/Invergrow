@@ -186,7 +186,7 @@ function DashboardTab({ state }: { state: SystemState }) {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard icon={<Wallet />}       label="Saldo Disponible"   value={state.balance}          sub="↑ Actualizado en vivo"    color="#00ff88" />
+        <StatCard icon={<Wallet />}       label="Saldo Contable"   value={state.balance}          sub="No retirable hasta liquidación real"    color="#00ff88" />
         <StatCard icon={<Repeat />}       label="Capital Invertido"  value={state.investedCapital}  sub="En contenido y activos"   color="#00d4ff" />
         <StatCard icon={<ArrowUpRight />} label="Total Retirado"     value={state.totalWithdrawals}  sub="A PayPal real"            color="#f59e0b" />
         <StatCard icon={<Zap />}          label="Ganancias Netas"    value={state.netGains}          sub="Ingresos verificados"       color="#a855f7" />
@@ -538,7 +538,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { showToast('error','Introduce un importe válido.'); return; }
-    if (amt > state.balance) { showToast('error',`Saldo insuficiente. Disponible: €${fmt(state.balance)}`); return; }
+    if (amt > state.balance) { showToast('error',`Saldo contable insuficiente. Registrado: €${fmt(state.balance)}`); return; }
     if (method === 'paypal' && (!paypalEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail.trim()))) { showToast('error','Introduce un correo PayPal válido.'); return; }
     if (method === 'bizum' && !phone.trim()) { showToast('error','Introduce tu número de teléfono para Bizum.'); return; }
     if (method === 'iban' && !iban.trim()) { showToast('error','Introduce tu IBAN.'); return; }
@@ -567,7 +567,7 @@ function WithdrawTab({ state, onWithdraw, showToast }: any) {
         <div className="lg:col-span-5 space-y-5">
           <Card>
             <div className="text-center py-6">
-              <SectionHeader icon={<Wallet />} title="Saldo Disponible" sub="Retirable" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
+              <SectionHeader icon={<Wallet />} title="Saldo Contable" sub="No retirable aún" iconColor="#00ff88" iconBg="rgba(0,255,136,0.1)" />
               <p className="text-5xl font-black mt-4" style={{ background: 'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
                 €{fmt(state.balance)}
               </p>
