@@ -68,6 +68,9 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
   try {
     const state = await getState();
     const workers = await getWorkers(state);
+    if (state.cycle_enabled === false) {
+      return res.status(200).json({ ok: true, skipped: true, reason: 'Ciclos desactivados desde el panel', message: 'Ciclo omitido: los ciclos están en OFF.' });
+    }
     const now = new Date().toISOString();
     const active = workers.filter((w: any) => w.status === 'ACTIVE' && w.unlocked !== false);
     const cycles: any[] = [];
@@ -101,6 +104,16 @@ async function handleWorkerCycle(req: VercelRequest, res: VercelResponse) {
       generated: cycleTotal, reinvestShare, balanceShare, balance: newBalance, investedCapital: newInvested, netGains: newNetGains,
       message: 'Ciclo ejecutado: 50% reinvertido y 50% añadido al balance; pendiente de verificar.' });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+// ─── Control manual de ciclos ─────────────────────────────────────────────────
+async function handleCycleToggle(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const { adminCode, enabled } = req.body || {};
+  if (adminCode !== ADMIN_CODE) return res.status(403).json({ error: 'Código admin incorrecto' });
+  if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled debe ser booleano' });
+  await patchState({ cycle_enabled: enabled });
+  return res.status(200).json({ success: true, cycleEnabled: enabled, message: enabled ? 'Ciclos automáticos ACTIVADOS.' : 'Ciclos automáticos DESACTIVADOS.' });
 }
 
 // ─── handleBinanceSimpleEarn ───────────────────────────────────────────────────
@@ -1002,6 +1015,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (path === 'data'             || path === '') return handleData(req, res);
   if (path === 'worker-cycle')                    return handleWorkerCycle(req, res);
+  if (path === 'cycle-toggle')                    return handleCycleToggle(req, res);
   if (path === 'withdraw')                        return handleWithdraw(req, res);
   if (path === 'income')                          return handleIncome(req, res);
   if (path === 'reinvest')                        return handleReinvest(req, res);
